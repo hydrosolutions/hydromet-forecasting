@@ -5,6 +5,7 @@ from numpy import nan, array, isnan, full
 import pandas
 import datetime
 from sklearn.base import clone
+from math import ceil, floor
 
 
 
@@ -103,17 +104,18 @@ class Forecaster(object):
         # self.model.fit(X,y)
 
 
-class Decadal_Forecaster(Forecaster):
+class Regular_Forecaster(Forecaster):
     '''Standard Decadal Forecast by Hydromet'''
 
-    def __init__(self, model, X_filepath, y_filepathlist, laglength, lag=0, multimodel=True):
+    def __init__(self, model, X_filepath, y_filepathlist, dateutils, laglength, lag=0, multimodel=True):
 
-        Forecaster.__init__(self, model, self.load_csv(X_filepath), self.load_csv(y_filepathlist), laglength, lag)
+        self.dateutils=dateutils
+        Forecaster.__init__(self, model, self.dateutils.load_csv(X_filepath), self.dateutils.load_csv(y_filepathlist), laglength, lag)
         self.multimodel=multimodel
         if not self.multimodel:
             self.maxindex=1
         else:
-            self.maxindex = 36
+            self.maxindex = self.dateutils.maxindex
             self.model = [clone(self.model) for i in range(self.maxindex)]
 
     def train(self):
@@ -125,11 +127,11 @@ class Decadal_Forecaster(Forecaster):
 
         for index, y_value in self.y.iteritems():
             if self.multimodel:
-                annual_index=self.convert_to_annual_decadal_index(index)
+                annual_index=self.dateutils.convert_to_annual_index(index)
             else:
                 annual_index=0
 
-            featuredates = [Decadal_Forecaster.shift_decades(index,-(1+shift)) for shift in range(0,self.laglength)]
+            featuredates = [self.dateutils.shift_by_period(index, -(1 + shift)) for shift in range(0, self.laglength)]
             for X in self.X:
                 try:
                     X_values = X[featuredates].values
@@ -160,11 +162,26 @@ class Decadal_Forecaster(Forecaster):
         mat=pandas.DataFrame(full((self.maxindex,year_max-year_min+1), False, dtype=bool), columns=range(year_min,year_max+1))
         mat.index=range(1,self.maxindex+1)
         for date in self.trainingdates:
-            mat.loc[self.convert_to_annual_decadal_index(date), date.year] = True
+            mat.loc[self.dateutils.convert_to_annual_index(date), date.year] = True
         return mat
 
-    @staticmethod
-    def load_csv(filepath):
+
+
+
+class regular_dateutils(object):
+
+    def __init__(self, mode):
+        if mode=='decadal':
+            self.maxindex=36
+            self.period=10
+        elif mode=="5-day":
+            self.maxindex=72
+            self.period=5
+        elif mode=="monthly":
+            self.maxindex=12
+            self.period=30
+
+    def load_csv(self, filepath):
         if type(filepath) is not list:
             filepathlist = [filepath]
         else:
@@ -182,7 +199,7 @@ class Decadal_Forecaster(Forecaster):
                         intlist.append(float(stringvalue))
                     except:
                         intlist.append(nan)
-                    date = Decadal_Forecaster.firstday_of_decade(year=int(row[0]), decade_of_year=idx + 1)
+                    date = self.firstday_of_period(year=int(row[0]), period_of_year=idx + 1)
                     datelist.append(date)
 
             series_list.append(pandas.Series(data=intlist, index=datelist))
@@ -192,31 +209,37 @@ class Decadal_Forecaster(Forecaster):
         else:
             return series_list
 
-    @staticmethod
-    def firstday_of_decade(year, decade_of_year):
-        assert 0 < decade_of_year < 37, 'decade_of_year is out of range 0 < x < 37'
-        month = int((decade_of_year - 1) / 3) + 1
-        day_start = ((decade_of_year - 1) % 3) * 10 + 1
+    def firstday_of_period(self, year, period_of_year):
+        assert 0 < period_of_year <= self.maxindex, 'period_of_year is out of range 0 < x < %s' % str(self.maxindex+1)
+        month = int((period_of_year - 1) / (self.maxindex/12)) + 1
+        day_start = ((period_of_year - 1) % (self.maxindex/12)) * self.period + 1
         return datetime.date(year, month, day_start)
 
-    @staticmethod
-    def convert_to_annual_decadal_index(date):
-        return (date.month - 1) * 3 + (date.day / 10) + 1
+    def convert_to_annual_index(self,date):
+        return (date.month - 1) * (self.maxindex/12) + (date.day / self.period) + 1
 
-    @staticmethod
-    def shift_decades(date,shift):
-        newindex=Decadal_Forecaster.convert_to_annual_decadal_index(date)+shift
+    def shift_by_period(self,date, shift):
+        newindex= self.convert_to_annual_index(date) + shift
         if newindex<1:
-            return Decadal_Forecaster.firstday_of_decade(date.year-1,newindex+36)
-        elif newindex>36:
-            return Decadal_Forecaster.firstday_of_decade(date.year + 1, newindex-36)
+            factor=int(floor((newindex-1)/self.maxindex))
+            return self.firstday_of_period(date.year + 1*factor, newindex - self.maxindex*factor)
+        elif newindex>self.maxindex:
+            factor = int(floor((newindex-1)/self.maxindex))
+            return self.firstday_of_period(date.year + int(1*factor), newindex - self.maxindex*factor)
         else:
-            return Decadal_Forecaster.firstday_of_decade(date.year, newindex)
+            return self.firstday_of_period(date.year, newindex)
 
 
 
 
 model=RegressionModel.build_regression_model(RegressionModel.SupportedModels(1))
 model=model.configure()
-test=Decadal_Forecaster(model,"/home/jules/Desktop/Hydromet/feature1.csv","/home/jules/Desktop/Hydromet/feature1.csv",laglength=1, multimodel=True)
+test=Regular_Forecaster(model,"/home/jules/Desktop/Hydromet/feature1.csv","/home/jules/Desktop/Hydromet/feature1.csv",regular_dateutils("5-day"), laglength=1, multimodel=True )
 test.train()
+
+print("hh")
+#test=dateutils("monthly")
+#date=test.firstday_of_period(2000,1)
+#print(date)
+#print(test.convert_to_annual_index(date))
+#print(test.shift_by_period(date,-12*1000))
