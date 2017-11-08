@@ -7,7 +7,7 @@ import datetime
 from sklearn.base import clone
 from math import ceil, floor
 
-
+#TODO: Limit csv-reader to maxindex, X_fiellist --> not list or single item, check length not type, assert lag>-1
 
 class RegressionModel(object):
     """ Supports setting up the Predictor Model
@@ -103,20 +103,32 @@ class Forecaster(object):
         #
         # self.model.fit(X,y)
 
-
 class Regular_Forecaster(Forecaster):
     '''Standard Decadal Forecast by Hydromet'''
 
-    def __init__(self, model, X_filepath, y_filepathlist, dateutils, laglength, lag=0, multimodel=True):
+    def __init__(self, model, y_filepath, X_filepathlist, dateutils, laglength, lag=0, multimodel=True):
 
         self.dateutils=dateutils
-        Forecaster.__init__(self, model, self.dateutils.load_csv(X_filepath), self.dateutils.load_csv(y_filepathlist), laglength, lag)
+        Forecaster.__init__(self, model, self.dateutils.load_csv(y_filepath), self.dateutils.load_csv(X_filepathlist), laglength, lag)
         self.multimodel=multimodel
         if not self.multimodel:
             self.maxindex=1
+            self.model=[self.model]
         else:
             self.maxindex = self.dateutils.maxindex
             self.model = [clone(self.model) for i in range(self.maxindex)]
+
+    def aggregate_featuredates(self, targetdate):
+        return [self.dateutils.shift_by_period(targetdate, -(1 + shift)) for shift in range(self.lag, self.lag + self.laglength)]
+
+    def aggregate_features(self, featuredates, X):
+        X_values = full([len(featuredates), len(X)], nan)
+        for i, x in enumerate(X):
+            try:
+                X_values[:, i] = x[featuredates].values
+            except KeyError:
+                pass
+        return X_values.reshape(X_values.size)
 
     def train(self):
 
@@ -124,21 +136,17 @@ class Regular_Forecaster(Forecaster):
         y_list = [[] for i in range(self.maxindex)]
         trainingdate_list=[]
 
-
         for index, y_value in self.y.iteritems():
             if self.multimodel:
                 annual_index=self.dateutils.convert_to_annual_index(index)
             else:
-                annual_index=0
+                annual_index=1
 
-            featuredates = [self.dateutils.shift_by_period(index, -(1 + shift)) for shift in range(0, self.laglength)]
-            for X in self.X:
-                try:
-                    X_values = X[featuredates].values
-                except KeyError:
-                    X_values=[nan]
+            featuredates=self.aggregate_featuredates(index)
 
-            if not (isnan(y_value) | any(isnan(X_values))):
+            X_values=self.aggregate_features(featuredates, self.X)
+
+            if not (isnan(y_value) | isnan(X_values).any()):
                 y_list[annual_index-1].append(y_value)
                 X_list[annual_index-1].append(X_values)
                 trainingdate_list.append(index)
@@ -146,15 +154,20 @@ class Regular_Forecaster(Forecaster):
         for i, item in enumerate(y_list):
             X=array(X_list[i])
             y=array(y_list[i])
-            if len(X)*len(y)>0:
+            if len(y)>0:
                 self.model[i].fit(X,y)
-                print(self.model[i].coef_)
+                #print(X.size)
+                #print(self.model[i].coef_)
+                #print(len(self.model[i].coef_))
 
         self.trainingdates=trainingdate_list
 
-
-    def predict(self, feature, ):
-        pass
+    def predict(self, targetdate, X_filepathlist):
+        featuredates=self.aggregate_featuredates(targetdate)
+        annual_index=self.dateutils.convert_to_annual_index(targetdate)
+        X=self.dateutils.load_csv(X_filepathlist)
+        X_values=self.aggregate_features(featuredates,X)
+        return self.model[annual_index-1].predict(X_values.reshape(1,-1))
 
     def trainingdate_matrix(self):
         year_min=self.trainingdates[0].year
@@ -164,9 +177,6 @@ class Regular_Forecaster(Forecaster):
         for date in self.trainingdates:
             mat.loc[self.dateutils.convert_to_annual_index(date), date.year] = True
         return mat
-
-
-
 
 class regular_dateutils(object):
 
@@ -229,15 +239,12 @@ class regular_dateutils(object):
         else:
             return self.firstday_of_period(date.year, newindex)
 
-
-
-
 model=RegressionModel.build_regression_model(RegressionModel.SupportedModels(1))
 model=model.configure()
-test=Regular_Forecaster(model,"/home/jules/Desktop/Hydromet/feature1.csv","/home/jules/Desktop/Hydromet/feature1.csv",regular_dateutils("5-day"), laglength=1, multimodel=True )
+test=Regular_Forecaster(model,"/home/jules/Desktop/Hydromet/feature1.csv",["/home/jules/Desktop/Hydromet/feature1.csv"],regular_dateutils("decadal"), lag=0, laglength=1, multimodel=True )
 test.train()
+print(test.predict(test.dateutils.firstday_of_period(2010,1),["/home/jules/Desktop/Hydromet/feature1.csv"]))
 
-print("hh")
 #test=dateutils("monthly")
 #date=test.firstday_of_period(2000,1)
 #print(date)
