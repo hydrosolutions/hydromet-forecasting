@@ -8,7 +8,8 @@ import pandas
 from numpy import nan, array, isnan, full
 from sklearn.base import clone
 
-#TODO make lag in days working, enhance the information output for missing data --> date, type feature set (use a object approach)
+
+#TODO evaluate with crossvalidate, evaluation2pdf, convert dateobject to monthly, enhance the information output for missing data --> date, type feature set (use a object approach)
 
 class RegressionModel(object):
     """Sets up the Predictor Model from sklearn, etc.
@@ -138,6 +139,7 @@ class Forecaster(object):
         assert len(self.X) > 0, "predictor dataset must contain at least one feature"
         assert len(self.laglength)==len(self.X), "The list laglength must contain as many elements as X"
 
+        self.trainingdates=None
         self.evaluation=None
 
     def aggregate_featuredates(self, targetdate):
@@ -160,6 +162,7 @@ class Forecaster(object):
         targetdate=self.y.shift_date_by_period(targetdate,0)-datetime.timedelta(self.lag)
         featuredates=[]
         for i,x in enumerate(self.X):
+            x_targetdate=x.shift_date_by_period(targetdate,0)
             dates=[]
             for shift in range(0, self.laglength[i]):
                 dates.append(x.shift_date_by_period(targetdate, -(1 + shift)))
@@ -193,7 +196,7 @@ class Forecaster(object):
             k = k + self.laglength[i]
         return X_values
 
-    def train(self):
+    def train(self, y=None):
         """Trains the model with X and y as training set
 
             Args:
@@ -235,6 +238,9 @@ class Forecaster(object):
                 # print(len(self.model[i].coef_))
 
         self.trainingdates = trainingdate_list
+        target=FixedIndexTimeseries(self.y.timeseries[self.trainingdates], self.y.mode)
+        forecast=FixedIndexTimeseries(self.predict_on_trainingset(), self.y.mode)
+        self.evaluation = Evaluator(target,forecast)
 
     def predict(self, targetdate, X):
         """Returns the predicted value for y at targetdate
@@ -267,21 +273,31 @@ class Forecaster(object):
         else:
             return self.model[annual_index - 1].predict(X_values.reshape(1, -1))
 
+    def predict_on_trainingset(self):
+        target=pandas.Series(index=self.trainingdates)
+        for date in target.index:
+            target[date]=self.predict(date, self.X)
+        return target
 
-
-    def trainingdate_matrix(self):
+    def trainingdata_count(self, dim=0):
         year_min = self.trainingdates[0].year
         year_max = self.trainingdates[-1].year
-        mat = pandas.DataFrame(full((self.maxindex, year_max - year_min + 1), False, dtype=bool),
+        mat = pandas.DataFrame(full((self.y.maxindex, year_max - year_min + 1), False, dtype=bool),
                                columns=range(year_min, year_max + 1))
-        mat.index = range(1, self.maxindex + 1)
+        mat.index = range(1, self.y.maxindex + 1)
+
         for date in self.trainingdates:
             mat.loc[self.y.convert_to_annual_index(date), date.year] = True
-        return mat
+
+        if dim == 0:
+            return mat.sum().sum()
+        elif dim==1:
+            return mat.sum(axis=1)
+        elif dim==2:
+            return mat
 
     class InsufficientData(Exception):
         pass
-
 
 class FixedIndexTimeseries(object):
     """This class implements a timeserieshandler for 5-day, decadal and monthly timeseries .
@@ -302,7 +318,7 @@ class FixedIndexTimeseries(object):
         period: The average length of a period in days (integer)
     """
 
-    def __init__(self, csv_filepath, mode):
+    def __init__(self, series, mode, label=None):
         self.mode=mode
         if mode == 'd':
             self.maxindex = 36
@@ -315,49 +331,11 @@ class FixedIndexTimeseries(object):
             self.period = 30
         else:
             raise ValueError("The given mode was not recognized. Check the docstring of the class.")
-        self.timeseries=self.load_csv(csv_filepath)
-        self.label=basename(csv_filepath)
-
-    def load_csv(self, filepath):
-        """loads array-like timeseries data from .csv into indexed pandas series
-
-            Description of required csv-file format: rows contain the data of 1 year.
-            The first column contains the year of each row. The length of the rows corresponds
-            to number of periods of the chosen mode in each year, additional columns will be ignored
-            e.g. monthly:
-            1995,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12
-            1996,...
-            Strings are loaded as NaN
-
-            Args:
-                filepath: the path to a csv file
-
-            Returns:
-                pandas.Series objects
-
-            Raises:
-                IOError: An error occured accessing the filepath
-                ValueError: The yearnumber in the first column of the csv could not be recognized.
-            """
-
-        reader = csv.reader(open(filepath, 'r'))
-        intlist = []
-        datelist = []
-        for row in reader:
-            for i in range(1,self.maxindex+1):
-                try:
-                    intlist.append(float(row[i]))
-                except:
-                    intlist.append(nan)
-                try:
-                    date = self.firstday_of_period(year=int(row[0]), annual_index=i)
-                except ValueError:
-                    raise ValueError("CSV format error: The first column must contain years")
-                datelist.append(date)
-
-        return pandas.Series(data=intlist, index=datelist, name=basename(filepath))
-
-
+        self.timeseries=series
+        if label==None:
+            self.label=self.timeseries.name
+        else:
+            self.label=label
 
     def firstday_of_period(self, year, annual_index):
         """Returns the first day of a period given by the year and the annual index of the period
@@ -398,7 +376,7 @@ class FixedIndexTimeseries(object):
             Raises:
                 None
             """
-        return (date.month - 1) * (self.maxindex / 12) + (date.day / self.period) + 1
+        return (date.month - 1) * (self.maxindex / 12) + ((date.day-1) / self.period) + 1
 
     def shift_date_by_period(self, date, shift):
         """Shifts a datetime.date object by the given number of periods.
@@ -429,11 +407,165 @@ class FixedIndexTimeseries(object):
         else:
             return self.firstday_of_period(date.year, newindex)
 
+    def norm(self, annualindex=None):
+        norm=[]
+        years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
+        if annualindex:
+            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
+        else:
+            indexrange= range(1,self.maxindex+1)
+
+        for index in indexrange:
+            dates=map(self.firstday_of_period,years,len(years)*[index])
+            norm.append(self.timeseries[dates].mean())
+        if type(annualindex)==int:
+            norm=norm[0]
+
+        return norm
+
+    def max(self, annualindex=None):
+        out = []
+        years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
+        if annualindex:
+            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
+        else:
+            indexrange = range(1, self.maxindex + 1)
+
+        for index in indexrange:
+            dates = map(self.firstday_of_period, years, len(years) * [index])
+            out.append(self.timeseries[dates].max())
+        if type(annualindex) == int:
+            out = out[0]
+
+        return out
+
+    def min(self, annualindex=None):
+
+        out = []
+        years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
+        if annualindex:
+            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
+        else:
+            indexrange = range(1, self.maxindex + 1)
+
+        for index in indexrange:
+            dates = map(self.firstday_of_period, years, len(years) * [index])
+            out.append(self.timeseries[dates].min())
+        if type(annualindex) == int:
+            out = out[0]
+
+        return out
+
+    def stdev_s(self, annualindex=None):
+        out = []
+        years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
+        if annualindex:
+            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
+        else:
+            indexrange = range(1, self.maxindex + 1)
+
+        for index in indexrange:
+            dates = map(self.firstday_of_period, years, len(years) * [index])
+            try:
+                out.append(self.timeseries[dates].std())
+            except:
+                out.append(nan)
+        if type(annualindex) == int:
+            out = out[0]
+
+        return out
+
+class FixedIndexTimeseriesCSV(FixedIndexTimeseries):
+    def __init__(self, csv_filepath, mode, label=None):
+        self.mode = mode
+        if mode == 'd':
+            self.maxindex = 36
+            self.period = 10
+        elif mode == "p":
+            self.maxindex = 72
+            self.period = 5
+        elif mode == "m":
+            self.maxindex = 12
+            self.period = 30
+        else:
+            raise ValueError("The given mode was not recognized. Check the docstring of the class.")
+        series=self.load_csv(csv_filepath)
+        FixedIndexTimeseries.__init__(self,series, mode, label)
+
+    def load_csv(self, filepath):
+            """loads array-like timeseries data from .csv into indexed pandas series
+
+                Description of required csv-file format: rows contain the data of 1 year.
+                The first column contains the year of each row. The length of the rows corresponds
+                to number of periods of the chosen mode in each year, additional columns will be ignored
+                e.g. monthly:
+                1995,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12
+                1996,...
+                Strings are loaded as NaN
+
+                Args:
+                    filepath: the path to a csv file
+
+                Returns:
+                    pandas.Series objects
+
+                Raises:
+                    IOError: An error occured accessing the filepath
+                    ValueError: The yearnumber in the first column of the csv could not be recognized.
+                """
+
+            reader = csv.reader(open(filepath, 'r'))
+            intlist = []
+            datelist = []
+            for row in reader:
+                for i in range(1, self.maxindex + 1):
+                    try:
+                        intlist.append(float(row[i]))
+                    except:
+                        intlist.append(nan)
+                    try:
+                        date = self.firstday_of_period(year=int(row[0]), annual_index=i)
+                    except ValueError:
+                        raise ValueError("CSV format error: The first column must contain years")
+                    datelist.append(date)
+
+            return pandas.Series(data=intlist, index=datelist, name=basename(filepath))
+
+class Evaluator(object):
+    def __init__(self, y, forecast):
+        self.y=y
+        self.forecast=forecast
+
+    def computeP(self):
+        P=[]
+        allowed_error=map(lambda x: x * 0.674, self.y.stdev_s())
+        years = range(min(self.y.timeseries.index).year, max(self.y.timeseries.index).year + 1)
+        for index in range(0,self.y.maxindex):
+            dates = map(self.y.firstday_of_period, years, len(years) * [index+1])
+            try:
+                error=abs(self.forecast.timeseries[dates]-self.y.timeseries[dates])
+                error.dropna()
+                good=sum(error<=allowed_error[index])
+                P.append(float(good)/len(error.dropna()))
+            except:
+                P.append(nan)
+        return P
+
+    def producePDF(self, filename):
+        import matplotlib.pyplot as plt
+        import tempfile
+        P=self.computeP()
+
+        f = plt.figure()
+        plt.plot(P)
+        f.savefig(filename, bbox_inches='tight')
+        return filename
+
+
 
 model = RegressionModel.build_regression_model(RegressionModel.SupportedModels(1))
 model = model.configure()
-test = Forecaster(model, FixedIndexTimeseries("/home/jules/Desktop/Hydromet/feature2.csv","p"),
-                  [FixedIndexTimeseries("/home/jules/Desktop/Hydromet/feature1.csv","d"), FixedIndexTimeseries("/home/jules/Desktop/Hydromet/feature2.csv","p")], lag=5, laglength=[1,1], multimodel=True)
+test = Forecaster(model, FixedIndexTimeseriesCSV("/home/jules/Desktop/Hydromet/feature1.csv","d"),
+                  [FixedIndexTimeseriesCSV("/home/jules/Desktop/Hydromet/feature1.csv","d")], lag=0, laglength=[1], multimodel=True)
 test.train()
-print(test.predict(datetime.date(2005,12,11),
-                   [FixedIndexTimeseries("/home/jules/Desktop/Hydromet/feature1.csv","d"), FixedIndexTimeseries("/home/jules/Desktop/Hydromet/feature2.csv","p")]))
+print(test.evaluation.producePDF("/home/jules/test.pdf"))
