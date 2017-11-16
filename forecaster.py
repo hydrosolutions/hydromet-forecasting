@@ -7,9 +7,7 @@ import enum
 import pandas
 from numpy import nan, array, isnan, full
 from sklearn.base import clone
-
-
-#TODO evaluate with crossvalidate, evaluation2pdf, convert dateobject to monthly, enhance the information output for missing data --> date, type feature set (use a object approach)
+from sklearn.model_selection import KFold
 
 class RegressionModel(object):
     """Sets up the Predictor Model from sklearn, etc.
@@ -95,54 +93,82 @@ class Forecaster(object):
     """Forecasting class for timeseries that can be handled/read by FixedIndexDatetil.
 
     This class enables the complete workflow from setting up a timeseries model, training, evaluating
-    and forecasting values. It should work with all machine learning objects that know the methods fit() and predict() for
-    a targetvector y and a feature array X. It was designed to work with the FixedIndexTimeseries class which handles
+    and forecasting values. It should work with all machine learning objects that know the methods fit() and predict().
+    It was designed to work with the FixedIndexTimeseries class which handles
     timeseries that have annual periodicity. In that sense, FixedIndex means, that each year has the same number of
     periods and that every period takes the same position in every year, e.g. monthes or semi-monthes etc. It does
-    not work for timeseries with periods, that strictly consist of the same  number of days and as such, might
-    overlap New Year.
+    not work for timeseries with periods of strict length and as such, might overlap New Year.
     However, if the option multimodel is set to False, it can work with arbitrary timeseries that are handled by a class
     that replicates the methods in FixedIndexDateUtil.
 
     Attributes:
-        evaluation: contains the raw output of the model evaluation.
+        trainingdates: a list of datetime.date objects of the periods whcih where used for training. Is None before training
+        evaluator: An Evaluator object of the current training state of the Forecaster instance. Is None before training
     """
 
     def __init__(self, model, y, X, laglength, lag=0, multimodel=True):
+        """Initialising the Forecaster Object
 
-        self.model = model
-        self.multimodel = multimodel
+            Args:
+                model: A model object that knows the method fit() and predict() for
+                        a targetvector y and a feature array X
+                y: A FixedIndexTimeseries Instance that is the target data
+                X: A list of FixedIndexTimeseries Instances that represent the feature data
+                laglength: A list of integers that define the number of past periods that are used from the feature set.
+                        Must have the same length as X
+                lag: (int): when positive: the difference in days between forecasting date and the first day of the forecasted period
+                            when negative: the difference in days between forecasting date and the first day of the period preceding the forecasted period
+                            Example:
+                                forecasted, decadal period is: 11.10-20.10,
+                                lag=0, laglength=1: The forecast is done on 11.10. The period 1.10 to 10.10 is used as feature.
+                                lag=4, laglength=2: The forecast is done on 7.10. The periods 21.9-30.9 and 11.9-20.9 is used as feature
+                                lag=-3, laglength=1: The forecast is done on 4.10. The period 21.9 to 30.9  is used as feature.
+                multimode: boolean. If true, a individual model is trained for each period of the year. Makes sense when the
+                            timeseries have annual periodicity in order to differentiate seasonality.
 
-        self.y = y
-        self.y.timeseries.columns = ["target"]
+            Returns:
+                A Forecaster object with the methods train and predict
+
+            Raises:
+                ValueError: When the list "laglength" is of different length than the list X.
+            """
+
+        self._model = model
+        self._multimodel = multimodel
+
+        self._y = y
+        self._y.timeseries.columns = ["target"]
 
         if type(X) is not list:
-            self.X = [X]
+            self._X = [X]
         else:
-            self.X = X
+            self._X = X
 
-        self.X_type = [x.mode for x in self.X]
-        self.lag = lag
+        self._X_type = [x.mode for x in self._X]
+        self._lag = lag
 
         if type(laglength) is not list:
-            self.laglength = [laglength]
+            self._laglength = [laglength]
         else:
-            self.laglength = laglength
+            self._laglength = laglength
 
-        if not self.multimodel:
-            self.maxindex = 1
-            self.model = [self.model]
+        if not len(self._laglength)==len(X):
+            raise ValueError("The arguments laglength and X must be lists of the same length")
+
+        if not self._multimodel:
+            self._maxindex = 1
+            self._model = [self._model]
         else:
-            self.maxindex = self.y.maxindex
-            self.model = [clone(self.model) for i in range(self.maxindex)]
+            self._maxindex = self._y.maxindex
+            self._model = [clone(self._model) for i in range(self._maxindex)]
 
-        assert len(self.X) > 0, "predictor dataset must contain at least one feature"
-        assert len(self.laglength)==len(self.X), "The list laglength must contain as many elements as X"
+        assert len(self._X) > 0, "predictor dataset must contain at least one feature"
+        assert len(self._laglength) == len(self._X), "The list laglength must contain as many elements as X"
 
         self.trainingdates=None
-        self.evaluation=None
+        self.evaluator=None
 
-    def aggregate_featuredates(self, targetdate):
+    def _aggregate_featuredates(self, targetdate):
         """Given a targetdate, returns the list of required dates from the featuresets.
 
             Decadal forecast, lag 0, laglength 2:
@@ -157,19 +183,19 @@ class Forecaster(object):
             Raises:
                 None
             """
-        if self.lag<0:
-            targetdate=self.y.shift_date_by_period(targetdate,-1)
-        targetdate=self.y.shift_date_by_period(targetdate,0)-datetime.timedelta(self.lag)
+        if self._lag<0:
+            targetdate=self._y.shift_date_by_period(targetdate, -1)
+        targetdate= self._y.shift_date_by_period(targetdate, 0) - datetime.timedelta(self._lag)
         featuredates=[]
-        for i,x in enumerate(self.X):
+        for i,x in enumerate(self._X):
             x_targetdate=x.shift_date_by_period(targetdate,0)
             dates=[]
-            for shift in range(0, self.laglength[i]):
+            for shift in range(0, self._laglength[i]):
                 dates.append(x.shift_date_by_period(targetdate, -(1 + shift)))
             featuredates.append(dates)
         return featuredates
 
-    def aggregate_features(self, featuredates, X):
+    def _aggregate_features(self, featuredates, X):
         """Returns a 1D array of features for all dates in featuredates and features in X.
 
             The output array is in the order: feature1_t-1,feature1_t-2,feature1_t-3,feature2_t-1,feature2_t-2, and so on...
@@ -185,43 +211,48 @@ class Forecaster(object):
                 None
             """
 
-        X_values = full(sum(self.laglength), nan)
+        X_values = full(sum(self._laglength), nan)
         k = 0
 
         for i, x in enumerate(X):
             try:
-                X_values[k:k + self.laglength[i]] = x.timeseries[featuredates[i]].values
+                X_values[k:k + self._laglength[i]] = x.timeseries[featuredates[i]].values
             except KeyError:
                 pass
-            k = k + self.laglength[i]
+            k = k + self._laglength[i]
         return X_values
 
     def train(self, y=None):
         """Trains the model with X and y as training set
 
             Args:
-                None
+                y: A FixedIndexTimeseries instance that contains the target data on which the model shall be trained.
+                    Is meant to be used for cross validation.
+                    Default: the complete available dataset given when the instance was initialised.
 
             Returns:
                 None
 
             Raises:
-                None
+                InsufficientData: is raised when there is not enough data to train the model for one complete year.
             """
 
-        X_list = [[] for i in range(self.maxindex)]
-        y_list = [[] for i in range(self.maxindex)]
+        if not y:
+            y=self._y
+
+        X_list = [[] for i in range(self._maxindex)]
+        y_list = [[] for i in range(self._maxindex)]
         trainingdate_list = []
 
-        for index, y_value in self.y.timeseries.iteritems():
-            if self.multimodel:
-                annual_index = self.y.convert_to_annual_index(index)
+        for index, y_value in y.timeseries.iteritems():
+            if self._multimodel:
+                annual_index = y.convert_to_annual_index(index)
             else:
                 annual_index = 1
 
-            featuredates = self.aggregate_featuredates(index)
+            featuredates = self._aggregate_featuredates(index)
 
-            X_values = self.aggregate_features(featuredates, self.X)
+            X_values = self._aggregate_features(featuredates, self._X)
 
             if not isnan(y_value) and not isnan(X_values).any():
                 y_list[annual_index - 1].append(y_value)
@@ -229,65 +260,109 @@ class Forecaster(object):
                 trainingdate_list.append(index)
 
         for i, item in enumerate(y_list):
-            X = array(X_list[i])
-            y = array(y_list[i])
-            if len(y) > 0:
-                self.model[i].fit(X, y)
-                # print(X.size)
-                # print(self.model[i].coef_)
-                # print(len(self.model[i].coef_))
+            x_set = array(X_list[i])
+            y_set = array(y_list[i])
+            if len(y_set) > 0:
+                try:
+                    self._model[i].fit(x_set, y_set)
+                except Exception as err:
+                    print("An error occured while training the model for annual index %s. Please check the training data." %(i+1))
+                    raise err
+            else:
+                raise self.InsufficientData("There is not enough data to train the model for the period with annualindex %s" %(i+1))
 
         self.trainingdates = trainingdate_list
-        target=FixedIndexTimeseries(self.y.timeseries[self.trainingdates], self.y.mode)
-        forecast=FixedIndexTimeseries(self.predict_on_trainingset(), self.y.mode)
-        self.evaluation = Evaluator(target,forecast)
 
     def predict(self, targetdate, X):
         """Returns the predicted value for y at targetdate
 
-            Uses the trained model to predict y. Returns NaN when noch prediction could be made due to missing data in the featureset
+            Uses the trained model to predict y for the period that targetdate is member of.
 
             Args:
                 targetdate: A datetime.date object that is member of the period for which y should be forecasted.
                 X: A list of FixedIndexTimeseriesobjects of the type and order of the Forecaster.X_type attribute
 
             Returns:
-                a float of the predicted value or NaN
+                a float of the predicted value.
 
             Raises:
-                ValueError: if X does not fit the type of X that the object was initialised with
+                ValueError: if X does not fit the type of X that the Forecaster instance was initialised with
                 InsufficientData: is raised when the dataset in X does not contain enough data to predict y.
+                ModelError: is raised when the model have not yet been trained but a forecast is requested.
             """
         type = [x.mode for x in X]
-        if not type==self.X_type:
-            raise ValueError("The input dataset X must be a list of FixedIndexTimeseries objects with type and length %s" %self.X_type)
+        if not type==self._X_type:
+            raise ValueError("The input dataset X must be a list of FixedIndexTimeseries objects with type and length %s" % self._X_type)
 
-        featuredates = self.aggregate_featuredates(targetdate)
-        if self.multimodel:
-            annual_index = self.y.convert_to_annual_index(targetdate)
+        featuredates = self._aggregate_featuredates(targetdate)
+        if self._multimodel:
+            annual_index = self._y.convert_to_annual_index(targetdate)
         else:
             annual_index=1
-        X_values = self.aggregate_features(featuredates, X)
-        if isnan(X_values).any():
+        X_values = self._aggregate_features(featuredates, X)
+        if not self.trainingdates:
+            raise self.ModelError("There is no trained model to be used for a prediciton. Call class method .train() first.")
+        elif isnan(X_values).any():
             raise self.InsufficientData("The data in X is insufficient to predict y for %s" %targetdate)
         else:
-            return self.model[annual_index - 1].predict(X_values.reshape(1, -1))
+            return self._model[annual_index - 1].predict(X_values.reshape(1, -1))
 
-    def predict_on_trainingset(self):
+    def _predict_on_trainingset(self):
         target=pandas.Series(index=self.trainingdates)
         for date in target.index:
-            target[date]=self.predict(date, self.X)
-        return target
+            target[date]=self.predict(date, self._X)
+        return FixedIndexTimeseries(target, mode=self._y)
+
+    def _cross_validate(self, k_fold=5):
+        # UNDER DEVELOPMENT
+        y=[]
+
+        # Aggregate data into groups for each annualindex
+        if self._multimodel:
+            for i in range(0, self._maxindex):
+                y.append(self._y.data_by_index(i + 1))
+        else:
+            y.append(self._y.timeseries)
+
+
+        # Split each group with KFold into training and test sets (mixes annual index again, but with equal split )
+        train=[pandas.Series()] * 5
+        test=[pandas.Series()] * 5
+        kf = KFold(n_splits=5)
+        for i, values in enumerate(y):
+            k=0
+            if len(y[i])>1:
+                for train_index, test_index in kf.split(y[i]):
+                    train[k]=train[k].append(y[i][train_index])
+                    test[k]=test[k].append(y[i][test_index])
+                    k+=1
+
+        # For each KFold: train a Forecaster Object and predict the train set.
+        predictions=[]
+        dates=[]
+        for i, trainingset in enumerate(train):
+            fc=Forecaster(self._model[0], FixedIndexTimeseries(trainingset, mode=self._y.mode), self._X, self._laglength, self._lag, self._multimodel)
+            fc.train()
+            for target in test[i].iteritems():
+                try:
+                    predictions.append(fc.predict(target[0], self._X))
+                    dates.append(target[0])
+                    print(fc.predict(target[0], self._X))
+                except:
+                    pass
+        predicted_ts=FixedIndexTimeseries(pandas.Series(data=predictions,index=dates).sort_index(), mode=self._y.mode)
+        targeted_ts=FixedIndexTimeseries(self._y.timeseries[dates])
+        return Evaluator(targeted_ts,predicted_ts)
 
     def trainingdata_count(self, dim=0):
         year_min = self.trainingdates[0].year
         year_max = self.trainingdates[-1].year
-        mat = pandas.DataFrame(full((self.y.maxindex, year_max - year_min + 1), False, dtype=bool),
+        mat = pandas.DataFrame(full((self._y.maxindex, year_max - year_min + 1), False, dtype=bool),
                                columns=range(year_min, year_max + 1))
-        mat.index = range(1, self.y.maxindex + 1)
+        mat.index = range(1, self._y.maxindex + 1)
 
         for date in self.trainingdates:
-            mat.loc[self.y.convert_to_annual_index(date), date.year] = True
+            mat.loc[self._y.convert_to_annual_index(date), date.year] = True
 
         if dim == 0:
             return mat.sum().sum()
@@ -299,26 +374,43 @@ class Forecaster(object):
     class InsufficientData(Exception):
         pass
 
+    class ModelError(Exception):
+        pass
+
 class FixedIndexTimeseries(object):
-    """This class implements a timeserieshandler for 5-day, decadal and monthly timeseries .
+    """This class implements a wrapper for 5-day, decadal and monthly timeseries .
 
+    FixedIndex means, that each year has the same number of periods and that every period takes the same position in
+    every year, e.g. monthes or semi-monthes etc. It does not work for timeseries with periods, that strictly consist
+    of the same  number of days and as such, might overlap New Year. This class is based on pandas.Series objects.
 
-    FixedIndex means, that each year has the same number of periods and that every period takes the same position in every year, e.g. monthes or semi-monthes etc. It does
-    not work for timeseries with periods, that strictly consist of the same  number of days and as such, might
-    overlap New Year. Pandas.timeseries and datetime.date do not (yet) support decadal or 5-day frequencies.
-
-    Such timeseries are indexed by the first day of a period, e.g. 2007/5/11 for the 2nd decade in May 2007.
+    The timeseries are indexed by the first day of a period, e.g. 2007/5/11 for the 2nd decade in May 2007.
     The annual index is defined as the position of the period within the year, e.g. 5 for the 2nd decade in February
-    Timeseries can be loaded from a csv file with the class method "load_csv(filepath)"
+    Timeseries can be loaded from a csv file with the subclass FixedIndexTimeseriesCSV
 
     Attributes:
-        timeseries: a pandas.Series object with data indexed by the first datetime.date of a period.
-        label: a string that contains the filename of the csv with whcih the class was initialized.
-        maxindex: The highest annual index that a period can have within a year, e.g. 36 for decadal.
-        period: The average length of a period in days (integer)
+        timeseries: a pandas.Series object with data indexed by the first day of a period as datetime.date object.
+        label: an optional, custom label for the object.
+        mode: The frequency mode of the timeseries. Either p (5-day), d (decadal), m (monthly)
+        maxindex: the maximum value that annualindex can have for the mode
     """
 
     def __init__(self, series, mode, label=None):
+        """Initialises an instance of the FixedIndexTimeseries Class
+
+            Args:
+                series: A pandas.Series object, where the index is datetime.date objects.
+                model: The frequency that series is expected to have, either: p (5-day), d (decadal), m (monthly)
+                label: An optional label for the timeseries. Default is None: uses the label that is found in the series object.
+
+            Returns:
+                An instance of FixedIndexTimeseries
+
+            Raises:
+                ValueError: When the argument given for mode is not recognized.
+                ModeError: when the mode given as argument and the property of series do not fit. Does only recognize if
+                        series if of higher frequency than indicated by mode.
+            """
         self.mode=mode
         if mode == 'd':
             self.maxindex = 36
@@ -331,11 +423,26 @@ class FixedIndexTimeseries(object):
             self.period = 30
         else:
             raise ValueError("The given mode was not recognized. Check the docstring of the class.")
-        self.timeseries=series
+
+        if self._check_timeseries(series):
+            self.timeseries = series
+        else:
+            raise self.ModeError("The given series can not be recognized as a timeseries with frequency mode %s" %self.mode)
+
         if label==None:
             self.label=self.timeseries.name
         else:
             self.label=label
+
+    class ModeError(Exception):
+        pass
+
+    def _check_timeseries(self,series):
+        for i, item in series.iteritems():
+            date=self.firstday_of_period(i.year, self.convert_to_annual_index(i))
+            if not date==i:
+                return False
+        return True
 
     def firstday_of_period(self, year, annual_index):
         """Returns the first day of a period given by the year and the annual index of the period
@@ -352,8 +459,9 @@ class FixedIndexTimeseries(object):
             Raises:
                 ValueError: When the annual index is invalid or outside the valid range defined by the mode
             """
+
         if not 0 < annual_index < self.maxindex+1 or not type(annual_index)==int:
-            raise ValueError("Annual index is not valid: 0 < index < %s for mode=%s" % (self.maxindex+1,self.mode))
+            raise ValueError("Annual index is not valid: 0 < index < %s for mode=%s" % (self.maxindex + 1, self.mode))
 
         month = int((annual_index - 1) / (self.maxindex / 12)) + 1
         day_start = ((annual_index - 1) % (self.maxindex / 12)) * self.period + 1
@@ -376,14 +484,14 @@ class FixedIndexTimeseries(object):
             Raises:
                 None
             """
-        return (date.month - 1) * (self.maxindex / 12) + ((date.day-1) / self.period) + 1
+        return (date.month - 1) * (self.maxindex / 12) + ((date.day - 1) / self.period) + 1
 
     def shift_date_by_period(self, date, shift):
         """Shifts a datetime.date object by the given number of periods.
 
             E.g. decadal: Shifting datetime.date(2007,1,25)
                           by -3 gives datetime.date(2006,12,21)
-            Remark: The input date is reduced to the first day of the period it is member of.
+            Remark: The input date is fist converter to the first day of the period it is member of.
 
             Args:
                 date: A datetime.date object
@@ -408,12 +516,13 @@ class FixedIndexTimeseries(object):
             return self.firstday_of_period(date.year, newindex)
 
     def norm(self, annualindex=None):
+        # NEEDS TO BE SHIFTED TO EVALUATOR
         norm=[]
         years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
         if annualindex:
             indexrange = ([annualindex] if type(annualindex) == int else annualindex)
         else:
-            indexrange= range(1,self.maxindex+1)
+            indexrange= range(1, self.maxindex + 1)
 
         for index in indexrange:
             dates=map(self.firstday_of_period,years,len(years)*[index])
@@ -424,6 +533,7 @@ class FixedIndexTimeseries(object):
         return norm
 
     def max(self, annualindex=None):
+        # NEEDS TO BE SHIFTED TO EVALUATOR
         out = []
         years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
         if annualindex:
@@ -440,7 +550,7 @@ class FixedIndexTimeseries(object):
         return out
 
     def min(self, annualindex=None):
-
+        # NEEDS TO BE SHIFTED TO EVALUATOR
         out = []
         years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
         if annualindex:
@@ -457,6 +567,7 @@ class FixedIndexTimeseries(object):
         return out
 
     def stdev_s(self, annualindex=None):
+        # NEEDS TO BE SHIFTED TO EVALUATOR
         out = []
         years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
         if annualindex:
@@ -475,7 +586,35 @@ class FixedIndexTimeseries(object):
 
         return out
 
+    def data_by_index(self, annualindex):
+        out=[]
+        years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
+        indexrange = ([annualindex] if type(annualindex) == int else annualindex)
+        for index in indexrange:
+            dates = map(self.firstday_of_period, years, len(years) * [index])
+            try:
+                data=self.timeseries[dates]
+                data=data.dropna()
+                out.append(data)
+            except:
+                out.append([])
+        if type(annualindex) == int:
+            out = out[0]
+
+        return out
+
 class FixedIndexTimeseriesCSV(FixedIndexTimeseries):
+    """Is a subclass of FixedIndexTimeseries. Can be initialised with a path of a csv file.
+
+    Description of required csv-file format: rows contain the data of 1 year.
+    The first column contains the year of each row. The length of the rows corresponds
+    to number of periods of the chosen mode in each year, additional columns will be ignored
+    e.g. monthly:
+    1995,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12
+    1996,...
+    Strings are loaded as NaN
+
+    """
     def __init__(self, csv_filepath, mode, label=None):
         self.mode = mode
         if mode == 'd':
@@ -510,7 +649,6 @@ class FixedIndexTimeseriesCSV(FixedIndexTimeseries):
                     pandas.Series objects
 
                 Raises:
-                    IOError: An error occured accessing the filepath
                     ValueError: The yearnumber in the first column of the csv could not be recognized.
                 """
 
@@ -532,6 +670,13 @@ class FixedIndexTimeseriesCSV(FixedIndexTimeseries):
             return pandas.Series(data=intlist, index=datelist, name=basename(filepath))
 
 class Evaluator(object):
+    """UNDER DEVELOPMENT: This class will contain all information and methods for assessing model performance
+
+    It will have a method write_pdf(filename), that generates the assessment report and writes it to "filename".
+    When no filename is given, the pdf is stored in a temporary folder.
+    Returns: the pathname where the pdf is stored.
+    """
+
     def __init__(self, y, forecast):
         self.y=y
         self.forecast=forecast
@@ -551,7 +696,7 @@ class Evaluator(object):
                 P.append(nan)
         return P
 
-    def producePDF(self, filename):
+    def write_pdf(self, filename):
         import matplotlib.pyplot as plt
         import tempfile
         P=self.computeP()
@@ -561,11 +706,12 @@ class Evaluator(object):
         f.savefig(filename, bbox_inches='tight')
         return filename
 
-
-
 model = RegressionModel.build_regression_model(RegressionModel.SupportedModels(1))
 model = model.configure()
-test = Forecaster(model, FixedIndexTimeseriesCSV("/home/jules/Desktop/Hydromet/feature1.csv","d"),
-                  [FixedIndexTimeseriesCSV("/home/jules/Desktop/Hydromet/feature1.csv","d")], lag=0, laglength=[1], multimodel=True)
+
+ts=FixedIndexTimeseriesCSV("/home/jules/Desktop/Hydromet/feature1.csv","d")
+FixedIndexTimeseries(ts.timeseries,"m")
+test = Forecaster(model, FixedIndexTimeseriesCSV("/home/jules/Desktop/Hydromet/feature1.csv","m"),
+                  [FixedIndexTimeseriesCSV("/home/jules/Desktop/Hydromet/feature1.csv","m")], lag=0, laglength=[1], multimodel=True)
 test.train()
-print(test.evaluation.producePDF("/home/jules/test.pdf"))
+print(test.predict(datetime.date(1960,7,11),[FixedIndexTimeseriesCSV("/home/jules/Desktop/Hydromet/feature1.csv","d")]))
