@@ -227,7 +227,8 @@ class Forecaster(object):
 
         for i, x in enumerate(X):
             try:
-                X_values[k:k + self._laglength[i]] = x.timeseries[featuredates[i]].values
+                ts = x.timeseries.reindex(featuredates[i]) # avoids the FutureWarning by pandas
+                X_values[k:k + self._laglength[i]] = ts[featuredates[i]].values
             except KeyError:
                 pass
             k = k + self._laglength[i]
