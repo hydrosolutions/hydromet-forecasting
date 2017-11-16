@@ -9,7 +9,7 @@ setup(name='hydromet_forecasting',
       license='MIT',
       packages=['hydromet_forecasting'],
       install_requires=[
-          'enum',
+          'enum34',
           'numpy',
           'datetime',
           'pandas',
