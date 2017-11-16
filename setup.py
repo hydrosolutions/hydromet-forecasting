@@ -14,5 +14,6 @@ setup(name='hydromet_forecasting',
           'datetime',
           'pandas',
           'sklearn',
+          'scipy',
       ],
       zip_safe=False)

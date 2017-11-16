@@ -12,7 +12,7 @@ Have a look at example.py and the timeseries data in example_data/ to understand
 
 ### Installing
 
-....
+pip install .
 
 ## Authors
 

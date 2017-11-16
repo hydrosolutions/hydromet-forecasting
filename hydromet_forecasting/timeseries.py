@@ -55,7 +55,7 @@ class FixedIndexTimeseries(object):
             raise ValueError("The given mode was not recognized. Check the docstring of the class.")
 
         if self._check_timeseries(series):
-            self.timeseries = series
+            self.timeseries = self._fill_timeseries(series)
         else:
             raise self.ModeError(
                 "The given series can not be recognized as a timeseries with frequency mode %s" % self.mode)
@@ -67,6 +67,15 @@ class FixedIndexTimeseries(object):
 
     class ModeError(Exception):
         pass
+
+    def _fill_timeseries(self,series):
+        filled_index=[]
+        years = range(min(series.index).year-1, max(series.index).year + 2)
+        for year in years:
+            for annual_index in range(0,self.maxindex):
+                filled_index.append(self.firstday_of_period(year,annual_index+1))
+        return series.reindex(filled_index)
+
 
     def _check_timeseries(self, series):
         for i, item in series.iteritems():
