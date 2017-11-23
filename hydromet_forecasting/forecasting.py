@@ -7,6 +7,9 @@ from sklearn.base import clone
 from sklearn.model_selection import KFold
 from numbers import Number
 
+from hydromet_forecasting.timeseries import FixedIndexTimeseries
+from hydromet_forecasting.evaluating import Evaluator
+
 
 class RegressionModel(object):
     """Sets up the Predictor Model from sklearn, etc.
@@ -101,7 +104,7 @@ class RegressionModel(object):
 
 
 class Forecaster(object):
-    """Forecasting class for timeseries that can be handled/read by FixedIndexDatetil.
+    """Forecasting class for timeseries that can be handled/read by FixedIndexTimeseries.
 
     This class enables the complete workflow from setting up a timeseries model, training, evaluating
     and forecasting values. It should work with all machine learning objects that know the methods fit() and predict().
@@ -325,10 +328,15 @@ class Forecaster(object):
             return self._model[annual_index - 1].predict(X_values.reshape(1, -1))[0]
 
     def _predict_on_trainingset(self):
+        if not self.trainingdates:
+            self.train()
+
         target = pandas.Series(index=self.trainingdates)
         for date in target.index:
             target[date] = self.predict(date, self._X)
-        return FixedIndexTimeseries(target, mode=self._y)
+        predicted_ts = FixedIndexTimeseries(target.sort_index(), mode=self._y.mode)
+        targeted_ts = self._y
+        return Evaluator(targeted_ts, predicted_ts)
 
     def _cross_validate(self, k_fold=5):
         # UNDER DEVELOPMENT
@@ -342,9 +350,9 @@ class Forecaster(object):
             y.append(self._y.timeseries)
 
         # Split each group with KFold into training and test sets (mixes annual index again, but with equal split )
-        train = [pandas.Series()] * 5
-        test = [pandas.Series()] * 5
-        kf = KFold(n_splits=5)
+        train = [pandas.Series()] * k_fold
+        test = [pandas.Series()] * k_fold
+        kf = KFold(n_splits=k_fold, shuffle=True)
         for i, values in enumerate(y):
             k = 0
             if len(y[i]) > 1:
@@ -364,70 +372,15 @@ class Forecaster(object):
                 try:
                     predictions.append(fc.predict(target[0], self._X))
                     dates.append(target[0])
-                    print(fc.predict(target[0], self._X))
                 except:
                     pass
         predicted_ts = FixedIndexTimeseries(pandas.Series(data=predictions, index=dates).sort_index(),
                                             mode=self._y.mode)
-        targeted_ts = FixedIndexTimeseries(self._y.timeseries[dates])
+        targeted_ts = self._y
         return Evaluator(targeted_ts, predicted_ts)
-
-    def trainingdata_count(self, dim=0):
-        year_min = self.trainingdates[0].year
-        year_max = self.trainingdates[-1].year
-        mat = pandas.DataFrame(full((self._y.maxindex, year_max - year_min + 1), False, dtype=bool),
-                               columns=range(year_min, year_max + 1))
-        mat.index = range(1, self._y.maxindex + 1)
-
-        for date in self.trainingdates:
-            mat.loc[self._y.convert_to_annual_index(date), date.year] = True
-
-        if dim == 0:
-            return mat.sum().sum()
-        elif dim == 1:
-            return mat.sum(axis=1)
-        elif dim == 2:
-            return mat
 
     class InsufficientData(Exception):
         pass
 
     class ModelError(Exception):
         pass
-
-
-class Evaluator(object):
-    """UNDER DEVELOPMENT: This class will contain all information and methods for assessing model performance
-
-    It will have a method write_pdf(filename), that generates the assessment report and writes it to "filename".
-    When no filename is given, the pdf is stored in a temporary folder.
-    Returns: the pathname where the pdf is stored.
-    """
-
-    def __init__(self, y, forecast):
-        self.y = y
-        self.forecast = forecast
-
-    def computeP(self):
-        P = []
-        allowed_error = map(lambda x: x * 0.674, self.y.stdev_s())
-        years = range(min(self.y.timeseries.index).year, max(self.y.timeseries.index).year + 1)
-        for index in range(0, self.y.maxindex):
-            dates = map(self.y.firstday_of_period, years, len(years) * [index + 1])
-            try:
-                error = abs(self.forecast.timeseries[dates] - self.y.timeseries[dates])
-                error.dropna()
-                good = sum(error <= allowed_error[index])
-                P.append(float(good) / len(error.dropna()))
-            except:
-                P.append(nan)
-        return P
-
-    def write_pdf(self, filename):
-        import matplotlib.pyplot as plt
-        P = self.computeP()
-
-        f = plt.figure()
-        plt.plot(P)
-        f.savefig(filename, bbox_inches='tight')
-        return filename

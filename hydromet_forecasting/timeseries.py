@@ -45,17 +45,20 @@ class FixedIndexTimeseries(object):
         if mode == 'd':
             self.maxindex = 36
             self.period = 10
+            self.periodname="decade"
         elif mode == "p":
             self.maxindex = 72
             self.period = 5
+            self.periodname="pentade"
         elif mode == "m":
             self.maxindex = 12
             self.period = 30
+            self.periodname="month"
         else:
             raise ValueError("The given mode was not recognized. Check the docstring of the class.")
 
         if self._check_timeseries(series):
-            self.timeseries = series
+            self.timeseries = series.sort_index()
         else:
             raise self.ModeError(
                 "The given series can not be recognized as a timeseries with frequency mode %s" % self.mode)
@@ -146,77 +149,6 @@ class FixedIndexTimeseries(object):
         else:
             return self.firstday_of_period(date.year, newindex)
 
-    def norm(self, annualindex=None):
-        # NEEDS TO BE SHIFTED TO EVALUATOR
-        norm = []
-        years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
-        if annualindex:
-            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
-        else:
-            indexrange = range(1, self.maxindex + 1)
-
-        for index in indexrange:
-            dates = map(self.firstday_of_period, years, len(years) * [index])
-            norm.append(self.timeseries[dates].mean())
-        if type(annualindex) == int:
-            norm = norm[0]
-
-        return norm
-
-    def max(self, annualindex=None):
-        # NEEDS TO BE SHIFTED TO EVALUATOR
-        out = []
-        years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
-        if annualindex:
-            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
-        else:
-            indexrange = range(1, self.maxindex + 1)
-
-        for index in indexrange:
-            dates = map(self.firstday_of_period, years, len(years) * [index])
-            out.append(self.timeseries[dates].max())
-        if type(annualindex) == int:
-            out = out[0]
-
-        return out
-
-    def min(self, annualindex=None):
-        # NEEDS TO BE SHIFTED TO EVALUATOR
-        out = []
-        years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
-        if annualindex:
-            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
-        else:
-            indexrange = range(1, self.maxindex + 1)
-
-        for index in indexrange:
-            dates = map(self.firstday_of_period, years, len(years) * [index])
-            out.append(self.timeseries[dates].min())
-        if type(annualindex) == int:
-            out = out[0]
-
-        return out
-
-    def stdev_s(self, annualindex=None):
-        # NEEDS TO BE SHIFTED TO EVALUATOR
-        out = []
-        years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
-        if annualindex:
-            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
-        else:
-            indexrange = range(1, self.maxindex + 1)
-
-        for index in indexrange:
-            dates = map(self.firstday_of_period, years, len(years) * [index])
-            try:
-                out.append(self.timeseries[dates].std())
-            except:
-                out.append(nan)
-        if type(annualindex) == int:
-            out = out[0]
-
-        return out
-
     def data_by_index(self, annualindex):
         out = []
         years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
@@ -253,12 +185,15 @@ class FixedIndexTimeseriesCSV(FixedIndexTimeseries):
         if mode == 'd':
             self.maxindex = 36
             self.period = 10
+            self.periodname = "decade"
         elif mode == "p":
             self.maxindex = 72
             self.period = 5
+            self.periodname = "pentade"
         elif mode == "m":
             self.maxindex = 12
             self.period = 30
+            self.periodname = "month"
         else:
             raise ValueError("The given mode was not recognized. Check the docstring of the class.")
         series = self.load_csv(csv_filepath)
