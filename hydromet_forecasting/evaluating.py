@@ -5,6 +5,7 @@ from hydromet_forecasting.timeseries import FixedIndexTimeseries
 from string import Template
 import base64
 import tempfile
+from os import path
 import pdfkit
 
 class Evaluator(object):
@@ -197,8 +198,9 @@ class Evaluator(object):
         df=pandas.DataFrame(data)
         return df.to_html()
 
-    def write_html(self, filename="/home/jules/Desktop/test.html"):
-        with open('/home/jules/Desktop/Hydromet/hydromet_forecasting/hydromet_forecasting/template', 'r') as htmltemplate:
+    def write_html(self, filename):
+        templatefilepath = path.join(path.dirname(__file__),'template')
+        with open(templatefilepath, 'r') as htmltemplate:
             page=Template(htmltemplate.read())
 
         encoded1=self.encode_figure(self.plot_trainingdata())
@@ -213,7 +215,7 @@ class Evaluator(object):
         htmlpage.close()
         return filename
 
-    def encode_figure(self, fig, filename=None):
+    def encode_figure(self, fig):
 
         with tempfile.TemporaryFile(suffix=".png") as tmpfile:
             fig.savefig(tmpfile, format="png")  # File position is at the end of the file.

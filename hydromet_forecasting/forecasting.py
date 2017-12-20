@@ -23,8 +23,7 @@ class RegressionModel(object):
 
     Attributes:
         default_parameters: dictionary of default parameters as parameter_type and default value pairs.
-        selectable_parameters: dictionary of possible parameters as parameter_type and a [min,max] range when numeric, or
-        a list of choices when boolean or string.
+        selectable_parameters: dictionary of parameters as parameter_type and a list of possible values [v1,v2,v3,v4,...]
     """
 
     def __init__(self, model_class, selectable_parameters, default_parameters):
@@ -49,16 +48,12 @@ class RegressionModel(object):
         if parameters is None:
             return self.model_class(**self.default_parameters)
         else:
-            for key in parameters:
-                if not key in self.default_parameters.keys():
-                    raise ValueError("The given parameter name %s is invalid" %key)
-                elif isinstance(self.default_parameters[key],Number) and not isinstance(self.default_parameters[key], bool):
-                    range=self.selectable_parameters[key]
-                    if not range[0]<=parameters[key]<=range[1]:
-                        raise ValueError("The given value for %s is outside the valid range %s." %(key,range))
+            for key in self.default_parameters:
+                if not key in parameters.keys():
+                    parameters.update({key: self.default_parameters[key]})
                 else:
-                    if not parameters[key] in self.selectable_parameters[key]:
-                        raise ValueError("The given value for %s must be one of these %s." %(key, self.selectable_parameters[key]))
+                    if not any(map(lambda x: x is parameters[key],self.selectable_parameters[key])):
+                        raise ValueError("The given value for %s must be a member of the class attribte selectable parameters." %(key))
 
             return self.model_class(**parameters)
 
@@ -99,9 +94,10 @@ class RegressionModel(object):
         elif model == cls.SupportedModels.extra_forests:
             from sklearn import ensemble
             return cls(ensemble.ExtraTreesRegressor,
-                       {'n_estimators': [10, 1000]},
-                       {'n_estimators': 50})
-
+                       {'n_estimators': range(1, 21, 1),
+                        'random_state': range(1,10)},
+                       {'n_estimators': 10,
+                        'random_state': 1})
 
 class Forecaster(object):
     """Forecasting class for timeseries that can be handled/read by FixedIndexTimeseries.
@@ -130,13 +126,13 @@ class Forecaster(object):
                 X: A list of FixedIndexTimeseries Instances that represent the feature data
                 laglength: A list of integers that define the number of past periods that are used from the feature set.
                         Must have the same length as X
-                lag: (int): when positive: the difference in days between forecasting date and the first day of the forecasted period
-                            when negative: the difference in days between forecasting date and the first day of the period preceding the forecasted period
+                lag: (int): when negative: the difference in days between forecasting date and the first day of the forecasted period (backwards in time)
+                            when positive: the difference in days between forecasting date and the first day of the period preceding the forecasted period (forward in time)
                             Example:
                                 forecasted, decadal period is: 11.10-20.10,
                                 lag=0, laglength=1: The forecast is done on 11.10. The period 1.10 to 10.10 is used as feature.
-                                lag=4, laglength=2: The forecast is done on 7.10. The periods 21.9-30.9 and 11.9-20.9 is used as feature
-                                lag=-3, laglength=1: The forecast is done on 4.10. The period 21.9 to 30.9  is used as feature.
+                                lag=-4, laglength=2: The forecast is done on 7.10. The periods 21.9-30.9 and 11.9-20.9 is used as feature
+                                lag=3, laglength=1: The forecast is done on 4.10. The period 21.9 to 30.9  is used as feature.
                 multimode: boolean. If true, a individual model is trained for each period of the year. Makes sense when the
                             timeseries have annual periodicity in order to differentiate seasonality.
 
@@ -159,7 +155,7 @@ class Forecaster(object):
             self._X = X
 
         self._X_type = [x.mode for x in self._X]
-        self._lag = lag
+        self._lag = -lag # switches the sign of lag as argument, makes it easier to understand
 
         if type(laglength) is not list:
             self._laglength = [laglength]
@@ -274,6 +270,8 @@ class Forecaster(object):
                 X_list[annual_index - 1].append(X_values)
                 trainingdate_list.append(index)
 
+        self.trainingdates = trainingdate_list
+
         for i, item in enumerate(y_list):
             x_set = array(X_list[i])
             y_set = array(y_list[i])
@@ -288,8 +286,6 @@ class Forecaster(object):
             else:
                 raise self.InsufficientData(
                     "There is not enough data to train the model for the period with annualindex %s" % (i + 1))
-
-        self.trainingdates = trainingdate_list
 
     def predict(self, targetdate, X):
         """Returns the predicted value for y at targetdate
@@ -338,8 +334,9 @@ class Forecaster(object):
         targeted_ts = self._y
         return Evaluator(targeted_ts, predicted_ts)
 
-    def _cross_validate(self, k_fold=5):
+    def cross_validate(self, k_fold='auto'):
         # UNDER DEVELOPMENT
+        # TODO Need to incoorporate self.trainingdates, otherwise min k_fold value is overestimated
         y = []
 
         # Aggregate data into groups for each annualindex
@@ -348,6 +345,23 @@ class Forecaster(object):
                 y.append(self._y.data_by_index(i + 1))
         else:
             y.append(self._y.timeseries)
+
+        # Check if each group has enough samples for the value of k_fold
+        groupsize = map(len,y)
+        if k_fold=='auto':
+            k_fold=min(groupsize)
+            if k_fold==1:
+                raise self.InsufficientData(
+                    "There are not enough samples for cross validation. Please provide a large dataset"
+                )
+        elif k_fold==1 or not isinstance(k_fold,int):
+            raise ValueError(
+                "The value of k_fold must be 2 or larger."
+            )
+        elif not all(map(lambda x: x>=k_fold,groupsize)):
+            raise self.InsufficientData(
+                "There are not enough samples for cross validation with k_fold=%s. Please choose a lower value." %k_fold
+            )
 
         # Split each group with KFold into training and test sets (mixes annual index again, but with equal split )
         train = [pandas.Series()] * k_fold

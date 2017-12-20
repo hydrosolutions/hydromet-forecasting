@@ -6,7 +6,6 @@ from os.path import basename
 import pandas
 from numpy import nan
 
-
 class FixedIndexTimeseries(object):
     """This class implements a wrapper for 5-day, decadal and monthly timeseries .
 
@@ -165,7 +164,6 @@ class FixedIndexTimeseries(object):
             out = out[0]
 
         return out
-
 
 class FixedIndexTimeseriesCSV(FixedIndexTimeseries):
     """Is a subclass of FixedIndexTimeseries. Can be initialised with a path of a csv file.
