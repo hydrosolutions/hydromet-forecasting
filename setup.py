@@ -15,5 +15,6 @@ setup(name='hydromet_forecasting',
           'pandas',
           'sklearn',
           'scipy',
+          'matplotlib',
       ],
       zip_safe=False)

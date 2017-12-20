@@ -6,7 +6,6 @@ from string import Template
 import base64
 import tempfile
 from os import path
-import pdfkit
 
 class Evaluator(object):
     """UNDER DEVELOPMENT: This class will contain all information and methods for assessing model performance
