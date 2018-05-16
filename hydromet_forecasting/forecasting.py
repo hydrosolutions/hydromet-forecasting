@@ -2,14 +2,17 @@ import datetime
 
 import enum
 import pandas
-from numpy import nan, array, isnan, full
+from numpy import nan, array, isnan, full, nanmean
 from sklearn.base import clone
 from sklearn.model_selection import KFold
-from numbers import Number
 
 from hydromet_forecasting.timeseries import FixedIndexTimeseries
 from hydromet_forecasting.evaluating import Evaluator
 
+from sklearn import preprocessing
+from timeit import default_timer as timer
+
+from stldecompose import decompose as decomp
 
 class RegressionModel(object):
     """Sets up the Predictor Model from sklearn, etc.
@@ -62,8 +65,11 @@ class RegressionModel(object):
 
             list_models(): Returns: dictionary of available models as name,value pairs """
 
-        linear_regression = 1
-        extra_forests = 2
+        LinearRegression = 1
+        ExtraTreesRegressor = 2
+        SGDRegressor = 3
+        AdaBoostRegressor = 4
+        MLPRegressor = 5
 
         @classmethod
         def list_models(self):
@@ -86,18 +92,42 @@ class RegressionModel(object):
                 None
                     """
 
-        if model == cls.SupportedModels.linear_regression:
+        if model == cls.SupportedModels.LinearRegression:
             from sklearn import linear_model
             return cls(linear_model.LinearRegression,
                        {'fit_intercept': [True, False]},
                        {'fit_intercept': True})
-        elif model == cls.SupportedModels.extra_forests:
+        elif model == cls.SupportedModels.ExtraTreesRegressor:
             from sklearn import ensemble
             return cls(ensemble.ExtraTreesRegressor,
-                       {'n_estimators': range(1, 21, 1),
+                       {'n_estimators': range(1, 41, 1),
                         'random_state': range(1,10)},
                        {'n_estimators': 10,
                         'random_state': 1})
+        elif model == cls.SupportedModels.SGDRegressor:
+            from sklearn import linear_model
+            return cls(linear_model.SGDRegressor,
+                       {'loss': ['squared_loss', 'huber', 'epsilon_insensitive','squared_epsilon_insensitive'],
+                        'penalty': ['none', 'l2', 'l1', 'elasticnet']},
+                       {'loss': 'squared_loss',
+                        'penalty': 'l2'})
+        elif model == cls.SupportedModels.AdaBoostRegressor:
+            from sklearn import ensemble
+            return cls(ensemble.AdaBoostRegressor,
+                       {'n_estimators': range(1, 41, 1),
+                        'random_state': range(1,10)},
+                       {'n_estimators': 10,
+                        'random_state': 1})
+
+        elif model == cls.SupportedModels.MLPRegressor:
+            from sklearn import neural_network
+            return cls(neural_network.MLPRegressor,
+                       {'hidden_layer_sizes': range(1, 1000, 10),
+                        'activation': ['identity', 'logistic', 'tanh', 'relu']},
+                       {'hidden_layer_sizes': 10,
+                        'activation': 'logistic'})
+
+
 
 class Forecaster(object):
     """Forecasting class for timeseries that can be handled/read by FixedIndexTimeseries.
@@ -116,7 +146,7 @@ class Forecaster(object):
         evaluator: An Evaluator object of the current training state of the Forecaster instance. Is None before training
     """
 
-    def __init__(self, model, y, X, laglength, lag=0, multimodel=True):
+    def __init__(self, model, y, X, laglength, lag=0, multimodel=True, decompose=False):
         """Initialising the Forecaster Object
 
             Args:
@@ -146,6 +176,17 @@ class Forecaster(object):
         self._model = model
         self._multimodel = multimodel
 
+        if not self._multimodel:
+            self._maxindex = 1
+            self._model = [self._model]
+        else:
+            self._maxindex = y.maxindex
+            self._model = [clone(self._model) for i in range(self._maxindex)]
+
+
+        self._decompose = decompose
+        self._seasonal = [0 for i in range(y.maxindex)]
+
         self._y = y
         self._y.timeseries.columns = ["target"]
 
@@ -155,6 +196,7 @@ class Forecaster(object):
             self._X = X
 
         self._X_type = [x.mode for x in self._X]
+
         self._lag = -lag # switches the sign of lag as argument, makes it easier to understand
 
         if type(laglength) is not list:
@@ -165,15 +207,11 @@ class Forecaster(object):
         if not len(self._laglength) == len(X):
             raise ValueError("The arguments laglength and X must be lists of the same length")
 
-        if not self._multimodel:
-            self._maxindex = 1
-            self._model = [self._model]
-        else:
-            self._maxindex = self._y.maxindex
-            self._model = [clone(self._model) for i in range(self._maxindex)]
+
+        self._y_scaler = [preprocessing.StandardScaler() for i in range(self._maxindex)]
+        self._X_scaler = [preprocessing.StandardScaler() for i in range(self._maxindex)]
 
         assert len(self._X) > 0, "predictor dataset must contain at least one feature"
-        assert len(self._laglength) == len(self._X), "The list laglength must contain as many elements as X"
 
         self.trainingdates = None
         self.evaluator = None
@@ -251,6 +289,13 @@ class Forecaster(object):
         if not y:
             y = self._y
 
+        freq = len(self._seasonal)
+        if self._decompose and freq>1: #TODO: Warning or not?
+            dec = decomp(y.timeseries.values, period=freq)
+            y = FixedIndexTimeseries(pandas.Series(dec.resid+dec.trend, index=y.timeseries.index), mode=y.mode)
+            seasonal = FixedIndexTimeseries(pandas.Series(dec.seasonal, index=y.timeseries.index), mode=y.mode)
+            self._seasonal = [nanmean(seasonal.data_by_index(i+1)) for i in range(freq)]
+
         X_list = [[] for i in range(self._maxindex)]
         y_list = [[] for i in range(self._maxindex)]
         trainingdate_list = []
@@ -273,11 +318,14 @@ class Forecaster(object):
         self.trainingdates = trainingdate_list
 
         for i, item in enumerate(y_list):
-            x_set = array(X_list[i])
-            y_set = array(y_list[i])
+            x_set = self._X_scaler[i].fit_transform(array(X_list[i]))
+            y_set = self._y_scaler[i].fit_transform(array(y_list[i]).reshape(-1,1))
+
             if len(y_set) > 0:
                 try:
-                    self._model[i].fit(x_set, y_set)
+                    #from pyramid.arima import ARIMA
+                    #fit = ARIMA(order=(1, 1, 1), seasonal_order=(0, 1, 1, 36)).fit(y=y_set.ravel())
+                    self._model[i].fit(x_set, y_set.ravel())
                 except Exception as err:
                     print(
                         "An error occured while training the model for annual index %s. Please check the training data." % (
@@ -321,7 +369,10 @@ class Forecaster(object):
         elif isnan(X_values).any():
             raise self.InsufficientData("The data in X is insufficient to predict y for %s" % targetdate)
         else:
-            return self._model[annual_index - 1].predict(X_values.reshape(1, -1))[0]
+            x_set = self._X_scaler[annual_index - 1].transform(X_values.reshape(1, -1))
+            prediction = self._model[annual_index - 1].predict(x_set)
+            invtrans_prediction = self._y_scaler[annual_index - 1].inverse_transform(prediction.reshape(-1,1))
+            return invtrans_prediction+self._seasonal[self._y.convert_to_annual_index(targetdate)-1]
 
     def _predict_on_trainingset(self):
         if not self.trainingdates:
@@ -337,6 +388,8 @@ class Forecaster(object):
     def cross_validate(self, k_fold='auto'):
         # UNDER DEVELOPMENT
         # TODO Need to incoorporate self.trainingdates, otherwise min k_fold value is overestimated
+        self.indicate_progress(0)
+
         y = []
 
         # Aggregate data into groups for each annualindex
@@ -349,7 +402,7 @@ class Forecaster(object):
         # Check if each group has enough samples for the value of k_fold
         groupsize = map(len,y)
         if k_fold=='auto':
-            k_fold=min(groupsize)
+            k_fold=min(groupsize,10)
             if k_fold==1:
                 raise self.InsufficientData(
                     "There are not enough samples for cross validation. Please provide a large dataset"
@@ -364,10 +417,16 @@ class Forecaster(object):
             )
 
         # Split each group with KFold into training and test sets (mixes annual index again, but with equal split )
+        maxsteps = len(y)+k_fold*10+1
+        t=1
+        self.indicate_progress(float(t)/maxsteps*100)
+        t+1
         train = [pandas.Series()] * k_fold
         test = [pandas.Series()] * k_fold
-        kf = KFold(n_splits=k_fold, shuffle=True)
+        kf = KFold(n_splits=k_fold, shuffle=False)
         for i, values in enumerate(y):
+            self.indicate_progress(float(t) / maxsteps * 100)
+            t=t + 1
             k = 0
             if len(y[i]) > 1:
                 for train_index, test_index in kf.split(y[i]):
@@ -379,19 +438,23 @@ class Forecaster(object):
         predictions = []
         dates = []
         for i, trainingset in enumerate(train):
-            fc = Forecaster(self._model[0], FixedIndexTimeseries(trainingset, mode=self._y.mode), self._X,
-                            self._laglength, self._lag, self._multimodel)
+            self.indicate_progress(float(t) / maxsteps * 100)
+            t = t + 10
+            fc = Forecaster(clone(self._model[0]), FixedIndexTimeseries(trainingset, mode=self._y.mode), self._X,
+                            self._laglength, self._lag, self._multimodel, self._decompose)
             fc.train()
             for target in test[i].iteritems():
                 try:
-                    predictions.append(fc.predict(target[0], self._X))
+                    predictions.append(fc.predict(target[0], self._X)[0,0])
                     dates.append(target[0])
                 except:
                     pass
-        predicted_ts = FixedIndexTimeseries(pandas.Series(data=predictions, index=dates).sort_index(),
-                                            mode=self._y.mode)
+        predicted_ts = FixedIndexTimeseries(pandas.Series(data=predictions, index=dates).sort_index(),mode=self._y.mode)
         targeted_ts = self._y
         return Evaluator(targeted_ts, predicted_ts)
+
+    def indicate_progress(self,p):
+        print("progress is %s%%" %(p))
 
     class InsufficientData(Exception):
         pass

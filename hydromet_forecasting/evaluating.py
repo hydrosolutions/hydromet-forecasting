@@ -1,4 +1,4 @@
-from numpy import nan, isnan, full, array, arange
+from numpy import nan, isnan, full, array, arange, corrcoef
 from matplotlib import pyplot as plt
 import pandas
 from hydromet_forecasting.timeseries import FixedIndexTimeseries
@@ -112,12 +112,26 @@ class Evaluator(object):
             dates = map(self.y_clean.firstday_of_period, years, len(years) * [index + 1])
             try:
                 error = abs(self.forecast.timeseries.reindex(dates)[dates] - self.y_clean.timeseries.reindex(dates)[dates])
-                error.dropna()
+                error = error.dropna()
                 good = sum(error <= allowed_error[index])
-                P.append(float(good) / len(error.dropna()))
+                P.append(float(good) / len(error))
             except:
                 P.append(nan)
         return P
+
+    def computeRelError(self):
+        relerror = []
+        stdev = self.stdev_s(self.y)
+        years = range(min(self.y_clean.timeseries.index).year, max(self.y_clean.timeseries.index).year + 1)
+        for index in range(0, self.y_clean.maxindex):
+            dates = map(self.y_clean.firstday_of_period, years, len(years) * [index + 1])
+            try:
+                error = abs(self.forecast.timeseries.reindex(dates)[dates] - self.y_clean.timeseries.reindex(dates)[dates])
+                error = error.dropna()
+                relerror.append(error.values/stdev[index])
+            except:
+                relerror.append(nan)
+        return relerror
 
     def trainingdata_count(self):
         year_min = self.y_clean.timeseries.index[0].year
@@ -167,6 +181,15 @@ class Evaluator(object):
         ax.set_ylim([0, 1])
         return fig
 
+    def plot_RelError(self):
+        relerror = self.computeRelError()
+        fig, ax = self.prepare_figure()
+        ax.boxplot(relerror)
+        ax.plot([0, ax.get_xlim()[1]], [0.674, 0.674], color='red', linestyle='dashed')
+        plt.ylabel("Error/STDEV")
+        ax.set_ylim([0, 1])
+        return fig
+
     def plot_trainingdata(self):
         count = self.trainingdata_count()
         fig, ax = self. prepare_figure()
@@ -178,11 +201,17 @@ class Evaluator(object):
 
     def plot_ts_comparison(self):
         fig, ax = plt.subplots(1, 1)
-        fig.set_figwidth(12)
-        fig.set_figheight(3)
-        ax.plot(self.y_clean.timeseries, label="observed")
-        ax.plot(self.forecast.timeseries, label="predicted")
-        ax.set_ylabel(self.y_clean.label)
+        fig.set_figwidth(8)
+        fig.set_figheight(8)
+        ax.scatter(self.y_clean.timeseries,self.forecast.timeseries, marker=".", color='black')
+        ax.set_ylabel("predicted")
+        ax.set_xlabel("observed")
+        maxval = max(ax.get_xlim()[1],ax.get_ylim()[1])
+        ax.set_ylim([0,maxval])
+        ax.set_xlim([0,maxval])
+        ax.plot([0, maxval], [0, maxval],color='green', linestyle='dashed')
+        r_corr = round(corrcoef(self.y_clean.timeseries,self.forecast.timeseries)[0,1],3)
+        ax.text(0.5 * maxval, 0.9 * maxval, ("R = %s" % (r_corr)))
         return fig
 
     def table_summary(self):
@@ -206,11 +235,12 @@ class Evaluator(object):
         encoded2 = self.encode_figure(self.plot_y_stats())
         encoded3 = self.encode_figure(self.plot_P())
         encoded4 = self.encode_figure(self.plot_ts_comparison())
+        encoded5 = self.encode_figure(self.plot_RelError())
 
         table = self.table_summary()
 
         htmlpage = open(filename, 'w')
-        htmlpage.write(page.safe_substitute(TABLE=table,IMAGE1=encoded1,IMAGE2=encoded2,IMAGE3=encoded3,IMAGE4=encoded4))
+        htmlpage.write(page.safe_substitute(TABLE=table,IMAGE1=encoded1,IMAGE2=encoded2,IMAGE3=encoded3,IMAGE4=encoded4,IMAGE5=encoded5))
         htmlpage.close()
         return filename
 

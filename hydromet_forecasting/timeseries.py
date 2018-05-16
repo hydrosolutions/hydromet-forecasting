@@ -6,8 +6,11 @@ from os.path import basename
 import pandas
 from numpy import nan
 
+from stldecompose import decompose
+
+
 class FixedIndexTimeseries(object):
-    """This class implements a wrapper for 5-day, decadal and monthly timeseries .
+    """This class implements a wrapper for 5-day, decadal and monthly timeseries.
 
     FixedIndex means, that each year has the same number of periods and that every period takes the same position in
     every year, e.g. monthes or semi-monthes etc. It does not work for timeseries with periods, that strictly consist
@@ -117,7 +120,7 @@ class FixedIndexTimeseries(object):
             Raises:
                 None
             """
-        return (date.month - 1) * (self.maxindex / 12) + ((date.day - 1) / self.period) + 1
+        return int((date.month - 1) * (float(self.maxindex) / 12)) + ((min(date.day,30) - 1) / self.period) + 1
 
     def shift_date_by_period(self, date, shift):
         """Shifts a datetime.date object by the given number of periods.
@@ -164,6 +167,29 @@ class FixedIndexTimeseries(object):
             out = out[0]
 
         return out
+
+    def trend(self):
+        dec = decompose(self.timeseries.values, period=self.maxindex)
+        return FixedIndexTimeseries(pandas.Series(dec.trend, index=self.timeseries.index), mode=self.mode)
+
+    def seasonal(self):
+        dec = decompose(self.timeseries.values, period=self.maxindex)
+        return FixedIndexTimeseries(pandas.Series(dec.seasonal, index=self.timeseries.index), mode=self.mode)
+
+    def residual(self):
+        dec = decompose(self.timeseries.values, period=self.maxindex)
+        return FixedIndexTimeseries(pandas.Series(dec.resid, index=self.timeseries.index), mode=self.mode)
+
+    def detrend(self):
+        dec = decompose(self.timeseries.values, period=self.maxindex)
+        return FixedIndexTimeseries(pandas.Series(dec.resid, index=self.timeseries.index)+pandas.Series(dec.seasonal, index=self.timeseries.index), mode=self.mode)
+
+    def derivative(self):
+        diff = self.timeseries.diff()
+        delta_days = [(x-y).days for x, y in zip(self.timeseries.index, self.timeseries.index[1:])]
+        derivative = -diff.drop(diff.index[0])/delta_days
+        return FixedIndexTimeseries(derivative, mode=self.mode)
+
 
 class FixedIndexTimeseriesCSV(FixedIndexTimeseries):
     """Is a subclass of FixedIndexTimeseries. Can be initialised with a path of a csv file.
