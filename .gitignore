@@ -100,4 +100,5 @@ venv/
 
 .Rhistory
 .idea
-data/
+AlaArchaData/
+output/
