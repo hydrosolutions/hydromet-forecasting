@@ -136,7 +136,7 @@ class Evaluator(object):
     def trainingdata_count(self):
         year_min = self.y_clean.timeseries.index[0].year
         year_max = self.y_clean.timeseries.index[-1].year
-        count = [0]*36
+        count = [0]*self.y_clean.maxindex
         for date in self.y_clean.timeseries.index:
             count[self.y_clean.convert_to_annual_index(date)-1]+=1
 

@@ -114,9 +114,11 @@ class RegressionModel(object):
         elif model == cls.SupportedModels.AdaBoostRegressor:
             from sklearn import ensemble
             return cls(ensemble.AdaBoostRegressor,
-                       {'n_estimators': range(1, 41, 1),
+                       {'base_estimator': ensemble.ExtraTreesRegressor(n_estimators=20),
+                        'n_estimators': range(1, 41, 1),
                         'random_state': range(1,10)},
-                       {'n_estimators': 10,
+                       {'base_estimator': ensemble.ExtraTreesRegressor(n_estimators=20),
+                        'n_estimators': 40,
                         'random_state': 1})
 
         elif model == cls.SupportedModels.MLPRegressor:

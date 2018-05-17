@@ -9,7 +9,7 @@ import datetime
 print(RegressionModel.SupportedModels.list_models())
 
 # Initialise a regression model class
-reg_model = RegressionModel.build_regression_model(RegressionModel.SupportedModels(2))
+reg_model = RegressionModel.build_regression_model(RegressionModel.SupportedModels(4))
 
 # Print default model parameters:
 print("Default parameters: %s" %reg_model.default_parameters)
@@ -18,18 +18,18 @@ print("Default parameters: %s" %reg_model.default_parameters)
 print("Possible parameters or range: %s" %reg_model.selectable_parameters)
 
 # Set parameter and configure the regression model from the model class
-model=reg_model.configure({'n_estimators':20})  #{'n_estimators':20}
+model=reg_model.configure()  #{'n_estimators':20}
 
 # Load example datasets od decadal timesteps (d) from csv
 target=FixedIndexTimeseriesCSV("AlaArchaData/monthly/Q.csv","m")
 feature1=FixedIndexTimeseriesCSV("AlaArchaData/decadal/Q.csv","d")
-#feature2=FixedIndexTimeseriesCSV("AlaArchaData/P.csv","d")
-#feature3=FixedIndexTimeseriesCSV("AlaArchaData/T.csv","d")
+feature2=FixedIndexTimeseriesCSV("AlaArchaData/decadal/P.csv","d")
+feature3=FixedIndexTimeseriesCSV("AlaArchaData/decadal/T.csv","d")
 #random=FixedIndexTimeseriesCSV("AlaArchaData/RANDOM.csv","d")
 
 
 # Set up Forecaster Object
-FC_obj = Forecaster(model, target, [feature1], lag=0, laglength=[36], multimodel=False, decompose=False)
+FC_obj = Forecaster(model, target, [feature1,feature1.derivative(),feature1.seasonal(),feature2,feature2.derivative(),feature3,feature3.derivative()], lag=0, laglength=[36,12,1,12,12,12,12], multimodel=False, decompose=True)
 
 
 # ---------------- TRAINING & FORECASTING ----------------
@@ -58,5 +58,5 @@ CV=FC_obj.cross_validate(k_fold='auto')
 
 #CV.computeP()
 # write an evaluation report to a html file
-CV.write_html(filename="output/monthly_firsttest.html")
+CV.write_html(filename="output/monthly_firsttestADABOOST.html")
 
