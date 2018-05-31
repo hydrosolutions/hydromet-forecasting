@@ -70,6 +70,7 @@ class RegressionModel(object):
         SGDRegressor = 3
         AdaBoostRegressor = 4
         MLPRegressor = 5
+        LassoLars = 6
 
         @classmethod
         def list_models(self):
@@ -129,6 +130,11 @@ class RegressionModel(object):
                        {'hidden_layer_sizes': 10,
                         'activation': 'logistic'})
 
+        elif model == cls.SupportedModels.LassoLars:
+            from sklearn import linear_model
+            return cls(linear_model.LassoLars,
+                       {'alpha': [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]},
+                       {'alpha': 0.1})
 
 
 class Forecaster(object):

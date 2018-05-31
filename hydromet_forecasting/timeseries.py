@@ -32,7 +32,7 @@ class FixedIndexTimeseries(object):
 
             Args:
                 series: A pandas.Series object, where the index is datetime.date objects.
-                model: The frequency that series is expected to have, either: p (5-day), d (decadal), m (monthly)
+                mode: The frequency that series is expected to have, either: p (5-day), d (decadal), m (monthly)
                 label: An optional label for the timeseries. Default is None: uses the label that is found in the series object.
 
             Returns:
@@ -57,7 +57,15 @@ class FixedIndexTimeseries(object):
             self.period = 30
             self.periodname="month"
         else:
-            raise ValueError("The given mode was not recognized. Check the docstring of the class.")
+            try:
+                res = mode.split("-")
+                self.begin = datetime.date(1,int(res[0]),1)
+                self.end = datetime.date(1,int(res[1])+1,1)-datetime.timedelta(1)
+                self.maxindex = 1
+                self.period = (self.end - self.begin).days
+                self.periodname = "season"
+            except:
+                raise ValueError("The given mode was not recognized. Check the docstring of the class for details.")
 
         if self._check_timeseries(series):
             self.timeseries = series.sort_index()
@@ -69,6 +77,8 @@ class FixedIndexTimeseries(object):
             self.label = self.timeseries.name
         else:
             self.label = label
+
+        self.mode_order = ['p','d','m']
 
     class ModeError(Exception):
         pass
@@ -99,9 +109,44 @@ class FixedIndexTimeseries(object):
         if not 0 < annual_index < self.maxindex + 1 or not type(annual_index) == int:
             raise ValueError("Annual index is not valid: 0 < index < %s for mode=%s" % (self.maxindex + 1, self.mode))
 
-        month = int((annual_index - 1) / (self.maxindex / 12)) + 1
-        day_start = ((annual_index - 1) % (self.maxindex / 12)) * self.period + 1
-        return datetime.date(year, month, day_start)
+        if self.maxindex == 1:
+            return datetime.date(year, self.begin.month, self.begin.day)
+        else:
+            month = int((annual_index - 1) / (float(self.maxindex) / 12)) + 1
+            day_start = int(((annual_index - 1) % (float(self.maxindex) / 12)) * self.period + 1)
+            return datetime.date(year, month, day_start)
+
+    def lastday_of_period(self, year, annual_index):
+        """Returns the last day of a period given by the year and the annual index of the period
+
+            Decadal: last day of period (2007,3) --> datetime.date(2007,1,31)
+
+            Args:
+                year: The year
+                annual_index: The index of the period within a year. 0 < annual_index < maxindex (e.g. 5-day: 72)
+
+            Returns:
+                datetime.date(y,m,d) of the last day of the period described by the year and annnual index.
+
+            Raises:
+                ValueError: When the annual index is invalid or outside the valid range defined by the mode
+            """
+
+        if not 0 < annual_index < self.maxindex + 1 or not type(annual_index) == int:
+            raise ValueError("Annual index is not valid: 0 < index < %s for mode=%s" % (self.maxindex + 1, self.mode))
+
+        if self.maxindex == 1:
+            return datetime.date(year, self.end.month, self.end.day)
+        else:
+            annual_index = annual_index+1
+            if annual_index>self.maxindex:
+                annual_index = 1
+                year = year + 1
+            return self.firstday_of_period(year,annual_index)-datetime.timedelta(1)
+
+    @staticmethod
+    def doy(date):
+        return date.timetuple().tm_yday
 
     def convert_to_annual_index(self, date):
         """Returns the annual_index of a datetime.date object
@@ -120,7 +165,13 @@ class FixedIndexTimeseries(object):
             Raises:
                 None
             """
-        return int((date.month - 1) * (float(self.maxindex) / 12)) + ((min(date.day,30) - 1) / self.period) + 1
+        if self.maxindex == 1:
+            if self.doy(self.begin) <= self.doy(date) <= self.doy(self. end):
+                return 1
+            else:
+                raise ValueError("The given date is not within the valid season")
+        else:
+            return int((date.month - 1) * (float(self.maxindex) / 12)) + ((min(date.day,30) - 1) / self.period) + 1
 
     def shift_date_by_period(self, date, shift):
         """Shifts a datetime.date object by the given number of periods.
@@ -152,9 +203,14 @@ class FixedIndexTimeseries(object):
             return self.firstday_of_period(date.year, newindex)
 
     def data_by_index(self, annualindex):
+
+        indexrange = ([annualindex] if type(annualindex) == int else annualindex)
+
+        if not all([(0 < i < self.maxindex+1) for i in indexrange]):
+            raise ValueError("The provided annualindex is outside the range %s < annualindex < %s" %(0,self.maxindex+1))
         out = []
         years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
-        indexrange = ([annualindex] if type(annualindex) == int else annualindex)
+
         for index in indexrange:
             dates = map(self.firstday_of_period, years, len(years) * [index])
             try:
@@ -190,6 +246,32 @@ class FixedIndexTimeseries(object):
         derivative = -diff.drop(diff.index[0])/delta_days
         return FixedIndexTimeseries(derivative, mode=self.mode)
 
+    def downsample(self, mode):
+        if len(self.mode) > 1:
+            raise ValueError('The timeseries can not be downsampled')
+        if len(mode) > 1:
+            self.mode_order.append(mode)
+
+        if self.mode_order.index(mode) < self.mode_order.index(self.mode):
+            raise ValueError('The target mode is of higher frequency than the source mode. Only downsampling is allowed.')
+        else:
+            dailyindex = pandas.date_range(self.timeseries.index.values[0], self.timeseries.index.values[-1], freq='D')
+            dailytimeseries = self.timeseries.reindex(dailyindex).interpolate('zero')
+            dummyInstance = FixedIndexTimeseries(pandas.Series(), mode=mode)
+            beginyear = self.timeseries.index.values[0].year
+            endyear = self.timeseries.index.values[-1].year
+            newindex = [dummyInstance.firstday_of_period(y, i) for y in range(beginyear, endyear+1) for i in range(1, dummyInstance.maxindex+1)]
+            values = [nan] * len(newindex)
+            for i,date in enumerate(newindex):
+                lastday = dummyInstance.lastday_of_period(date.year,dummyInstance.convert_to_annual_index(date))
+                try:
+                    values[i] = dailytimeseries.reindex(pandas.date_range(date,lastday,freq='D')).mean()
+                except:
+                    pass
+        return FixedIndexTimeseries(pandas.Series(values,newindex),mode=mode)
+
+
+
 
 class FixedIndexTimeseriesCSV(FixedIndexTimeseries):
     """Is a subclass of FixedIndexTimeseries. Can be initialised with a path of a csv file.
@@ -219,7 +301,17 @@ class FixedIndexTimeseriesCSV(FixedIndexTimeseries):
             self.period = 30
             self.periodname = "month"
         else:
-            raise ValueError("The given mode was not recognized. Check the docstring of the class.")
+            try:
+                res = mode.split("-")
+                self.begin = datetime.date(1, int(res[0]), 1)
+                self.end = datetime.date(1, int(res[1]) + 1, 1) - datetime.timedelta(1)
+                self.maxindex = 1
+                self.period = (self.end - self.begin).days
+                self.periodname = "season"
+            except:
+                raise ValueError("The given mode was not recognized. Check the docstring of the class for details.")
+
+
         series = self.load_csv(csv_filepath)
         FixedIndexTimeseries.__init__(self, series, mode, label)
 
