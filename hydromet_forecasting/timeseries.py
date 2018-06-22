@@ -56,11 +56,16 @@ class FixedIndexTimeseries(object):
             self.maxindex = 12
             self.period = 30
             self.periodname="month"
+        elif mode == "dl":
+            self.maxindex = 365
+            self.period = 1
+            self.periodname="daily"
         else:
             try:
                 res = mode.split("-")
                 self.begin = datetime.date(1,int(res[0]),1)
-                self.end = datetime.date(1,int(res[1])+1,1)-datetime.timedelta(1)
+                self.end = (datetime.date(1,int(res[1]),1) + datetime.timedelta(32)).replace(day=1) + datetime.timedelta(-1) #Ugly solution to get last day of the month
+                #self.yearswitch = False if int(res[1])>int(res[0]) else True #does the season definition overlap new year?
                 self.maxindex = 1
                 self.period = (self.end - self.begin).days
                 self.periodname = "season"
@@ -78,7 +83,7 @@ class FixedIndexTimeseries(object):
         else:
             self.label = label
 
-        self.mode_order = ['p','d','m']
+        self.mode_order = ['dl','p','d','m']
 
     class ModeError(Exception):
         pass
@@ -111,6 +116,8 @@ class FixedIndexTimeseries(object):
 
         if self.maxindex == 1:
             return datetime.date(year, self.begin.month, self.begin.day)
+        elif self.maxindex == 365:
+            return datetime.date(year, 1, 1) + datetime.timedelta(annual_index - 1)
         else:
             month = int((annual_index - 1) / (float(self.maxindex) / 12)) + 1
             day_start = int(((annual_index - 1) % (float(self.maxindex) / 12)) * self.period + 1)
@@ -166,10 +173,12 @@ class FixedIndexTimeseries(object):
                 None
             """
         if self.maxindex == 1:
-            if self.doy(self.begin) <= self.doy(date) <= self.doy(self. end):
-                return 1
+            if self.doy(date) > self.doy(self.end):
+                return 2
             else:
-                raise ValueError("The given date is not within the valid season")
+                return 1
+        elif self.maxindex == 365:
+            return self.doy(date)
         else:
             return int((date.month - 1) * (float(self.maxindex) / 12)) + ((min(date.day,30) - 1) / self.period) + 1
 
@@ -224,6 +233,131 @@ class FixedIndexTimeseries(object):
 
         return out
 
+    def norm(self, annualindex=None):
+        """Given a FixedIndexTimeseries, returns the average (norm) value for each period of the year or the specified period
+
+            Args:
+                FixedIndexTimeseriesObj: a FixedIndexTimeseries instance
+                annualindex: None (default), or the index or list of indexes of the period(s) for which the norm should be computed.
+                            Otherwise the norms for all periods are computed.
+
+            Returns:
+                A value or list of values describing the norm in the same order as argument annualindex
+
+            Raises:
+                None
+            """
+
+        norm = []
+        #years = range(min(FixedIndexTimeseriesObj.timeseries.index).year, max(FixedIndexTimeseriesObj.timeseries.index).year + 1)
+        if annualindex:
+            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
+        else:
+            indexrange = range(1, self.maxindex + 1)
+
+        for index in indexrange:
+            # TODO dates = map(FixedIndexTimeseriesObj.firstday_of_period, years, len(years) * [index])
+            #norm.append(FixedIndexTimeseriesObj.timeseries[dates].mean())
+            norm.append(self.data_by_index(index).mean())
+        if type(annualindex) == int:
+            return norm[0]
+        else:
+            return norm
+
+    def max(self, annualindex=None):
+        """Given a FixedIndexTimeseries, returns the max value for each period of the year or the specified period
+
+            Args:
+                FixedIndexTimeseriesObj: a FixedIndexTimeseries instance
+                annualindex: None (default), or the index or list of indexes of the period(s) for which the max value should be computed.
+                            Otherwise the max values for all periods are computed.
+
+            Returns:
+                A value or list of values describing the maximum in the same order as argument annualindex
+
+            Raises:
+                None
+            """
+
+        out = []
+        #years = range(min(FixedIndexTimeseries.timeseries.index).year, max(FixedIndexTimeseries.timeseries.index).year + 1)
+        if annualindex:
+            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
+        else:
+            indexrange = range(1, self.maxindex + 1)
+
+        for index in indexrange:
+            # TODO dates = map(FixedIndexTimeseries.firstday_of_period, years, len(years) * [index])
+            #out.append(FixedIndexTimeseries.timeseries[dates].max())
+            out.append(self.data_by_index(index).max())
+        if type(annualindex) == int:
+            return out[0]
+        else:
+            return out
+
+    def min(self, annualindex=None):
+        """Given a FixedIndexTimeseries, returns the min value for each period of the year or the specified period
+
+            Args:
+                FixedIndexTimeseriesObj: a FixedIndexTimeseries instance
+                annualindex: None (default), or the index or list of indexes of the period(s) for which the min value should be computed.
+                            Otherwise the min values for all periods are computed.
+
+            Returns:
+                A value or list of values describing the minimum in the same order as argument annualindex
+
+            Raises:
+                None
+            """
+
+        out = []
+        #years = range(min(FixedIndexTimeseries.timeseries.index).year, max(FixedIndexTimeseries.timeseries.index).year + 1)
+        if annualindex:
+            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
+        else:
+            indexrange = range(1, self.maxindex + 1)
+
+        for index in indexrange:
+            # TODO dates = map(FixedIndexTimeseries.firstday_of_period, years, len(years) * [index])
+            #out.append(FixedIndexTimeseries.timeseries[dates].min())
+            out.append(self.data_by_index(index).min())
+        if type(annualindex) == int:
+            return out[0]
+        else:
+            return out
+
+    def stdev_s(self, annualindex=None):
+        """Given a FixedIndexTimeseries, returns the stdev.sample value for each period of the year or the specified period
+
+            Args:
+                FixedIndexTimeseriesObj: a FixedIndexTimeseries instance
+                annualindex: None (default), or the index or list of indexes of the period(s) for which the stdev.sample value should be computed.
+                            Otherwise the stdev.sample values for all periods are computed.
+
+            Returns:
+                A value or list of values describing the stdev.sample in the same order as argument annualindex
+
+            Raises:
+                None
+            """
+        out = []
+        years = range(min(self.timeseries.index).year, max(self.timeseries.index).year + 1)
+        if annualindex:
+            indexrange = ([annualindex] if type(annualindex) == int else annualindex)
+        else:
+            indexrange = range(1, self.maxindex + 1)
+
+        for index in indexrange:
+            dates = map(self.firstday_of_period, years, len(years) * [index])
+            try:
+                out.append(self.timeseries[dates].std())
+            except:
+                out.append(nan)
+        if type(annualindex) == int:
+            return out[0]
+        else:
+            return out
+
     def trend(self):
         dec = decompose(self.timeseries.values, period=self.maxindex)
         return FixedIndexTimeseries(pandas.Series(dec.trend, index=self.timeseries.index), mode=self.mode)
@@ -247,13 +381,13 @@ class FixedIndexTimeseries(object):
         return FixedIndexTimeseries(derivative, mode=self.mode)
 
     def downsample(self, mode):
-        if len(self.mode) > 1:
+        if len(self.mode) > 2:
             raise ValueError('The timeseries can not be downsampled')
         if len(mode) > 1:
             self.mode_order.append(mode)
 
-        if self.mode_order.index(mode) < self.mode_order.index(self.mode):
-            raise ValueError('The target mode is of higher frequency than the source mode. Only downsampling is allowed.')
+        if self.mode_order.index(mode) <= self.mode_order.index(self.mode):
+            raise ValueError('The target mode is of same or higher frequency than the source mode. Only downsampling is allowed.')
         else:
             dailyindex = pandas.date_range(self.timeseries.index.values[0], self.timeseries.index.values[-1], freq='D')
             dailytimeseries = self.timeseries.reindex(dailyindex).interpolate('zero')
@@ -269,6 +403,13 @@ class FixedIndexTimeseries(object):
                 except:
                     pass
         return FixedIndexTimeseries(pandas.Series(values,newindex),mode=mode)
+
+    def multiply(self, FixedIndexTimeseries_obj):
+        if self.mode is not FixedIndexTimeseries_obj.mode:
+            raise self.ModeError("Both timeseries must be of the same mode")
+
+        res = self.timeseries.multiply(FixedIndexTimeseries_obj.timeseries)
+        return FixedIndexTimeseries(res, mode = self.mode)
 
 
 
@@ -300,6 +441,10 @@ class FixedIndexTimeseriesCSV(FixedIndexTimeseries):
             self.maxindex = 12
             self.period = 30
             self.periodname = "month"
+        elif mode == "dl":
+            self.maxindex = 365
+            self.period = 1
+            self.periodname="daily"
         else:
             try:
                 res = mode.split("-")

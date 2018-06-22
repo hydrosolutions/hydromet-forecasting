@@ -2,7 +2,7 @@ import datetime
 
 import enum
 import pandas
-from numpy import nan, array, isnan, full, nanmean
+from numpy import nan, array, isnan, full, nanmean, mean
 from sklearn.base import clone
 from sklearn.model_selection import KFold
 
@@ -10,9 +10,10 @@ from hydromet_forecasting.timeseries import FixedIndexTimeseries
 from hydromet_forecasting.evaluating import Evaluator
 
 from sklearn import preprocessing
-from timeit import default_timer as timer
+from monthdelta import monthdelta
 
 from stldecompose import decompose as decomp
+import itertools
 
 class RegressionModel(object):
     """Sets up the Predictor Model from sklearn, etc.
@@ -55,7 +56,7 @@ class RegressionModel(object):
                 if not key in parameters.keys():
                     parameters.update({key: self.default_parameters[key]})
                 else:
-                    if not any(map(lambda x: x is parameters[key],self.selectable_parameters[key])):
+                    if not any(map(lambda x: x == parameters[key],self.selectable_parameters[key])):
                         raise ValueError("The given value for %s must be a member of the class attribte selectable parameters." %(key))
 
             return self.model_class(**parameters)
@@ -70,7 +71,7 @@ class RegressionModel(object):
         SGDRegressor = 3
         AdaBoostRegressor = 4
         MLPRegressor = 5
-        LassoLars = 6
+        Lasso = 6
 
         @classmethod
         def list_models(self):
@@ -130,12 +131,11 @@ class RegressionModel(object):
                        {'hidden_layer_sizes': 10,
                         'activation': 'logistic'})
 
-        elif model == cls.SupportedModels.LassoLars:
+        elif model == cls.SupportedModels.Lasso:
             from sklearn import linear_model
-            return cls(linear_model.LassoLars,
+            return cls(linear_model.Lasso,
                        {'alpha': [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]},
-                       {'alpha': 0.1})
-
+                       {'alpha': 1})
 
 class Forecaster(object):
     """Forecasting class for timeseries that can be handled/read by FixedIndexTimeseries.
@@ -155,15 +155,15 @@ class Forecaster(object):
     """
 
     def __init__(self, model, y, X, laglength, lag=0, multimodel=True, decompose=False):
-        """Initialising the Forecaster Object
+        """Initialising the Forecaster Instance
 
             Args:
-                model: A model object that knows the method fit() and predict() for
+                model: A model instance that knows the method fit() and predict() for
                         a targetvector y and a feature array X
                 y: A FixedIndexTimeseries Instance that is the target data
                 X: A list of FixedIndexTimeseries Instances that represent the feature data
                 laglength: A list of integers that define the number of past periods that are used from the feature set.
-                        Must have the same length as X
+                            Must have the same length as X
                 lag: (int): when negative: the difference in days between forecasting date and the first day of the forecasted period (backwards in time)
                             when positive: the difference in days between forecasting date and the first day of the period preceding the forecasted period (forward in time)
                             Example:
@@ -171,11 +171,13 @@ class Forecaster(object):
                                 lag=0, laglength=1: The forecast is done on 11.10. The period 1.10 to 10.10 is used as feature.
                                 lag=-4, laglength=2: The forecast is done on 7.10. The periods 21.9-30.9 and 11.9-20.9 is used as feature
                                 lag=3, laglength=1: The forecast is done on 4.10. The period 21.9 to 30.9  is used as feature.
-                multimode: boolean. If true, a individual model is trained for each period of the year. Makes sense when the
-                            timeseries have annual periodicity in order to differentiate seasonality.
+                multimodel: boolean. If true, a individual model is trained for each period of the year. Is used to build different models
+                            when the characteristics of the target timeseries have strong seasonality
+                decompose: boolean: If true, the target timeseries is decomposed into seasonality and residual. The forecast is only done for the
+                            residual.
 
             Returns:
-                A Forecaster object with the methods train and predict
+                A Forecaster instance with the methods train, predict and cross_validate
 
             Raises:
                 ValueError: When the list "laglength" is of different length than the list X.
@@ -284,8 +286,8 @@ class Forecaster(object):
 
             Args:
                 y: A FixedIndexTimeseries instance that contains the target data on which the model shall be trained.
-                    Is meant to be used for cross validation.
-                    Default: the complete available dataset given when the instance was initialised.
+                    Is meant to be used for cross validation or if not all availabe data shall be used for training.
+                    Default: None (the complete available dataset given when the instance was initialised is used.)
 
             Returns:
                 None
@@ -298,11 +300,11 @@ class Forecaster(object):
             y = self._y
 
         freq = len(self._seasonal)
-        if self._decompose and freq>1: #TODO: Warning or not?
+        if self._decompose and freq>1:
             dec = decomp(y.timeseries.values, period=freq)
             y = FixedIndexTimeseries(pandas.Series(dec.resid+dec.trend, index=y.timeseries.index), mode=y.mode)
             seasonal = FixedIndexTimeseries(pandas.Series(dec.seasonal, index=y.timeseries.index), mode=y.mode)
-            self._seasonal = [nanmean(seasonal.data_by_index(i+1)) for i in range(freq)]
+            self._seasonal = [nanmean(seasonal.data_by_index(i+1)) for i in range(freq)] # TODO: is self._seasonal overwritten here? Maybe choose another variable name?
 
         X_list = [[] for i in range(self._maxindex)]
         y_list = [[] for i in range(self._maxindex)]
@@ -331,8 +333,6 @@ class Forecaster(object):
 
             if len(y_set) > 0:
                 try:
-                    #from pyramid.arima import ARIMA
-                    #fit = ARIMA(order=(1, 1, 1), seasonal_order=(0, 1, 1, 36)).fit(y=y_set.ravel())
                     self._model[i].fit(x_set, y_set.ravel())
                 except Exception as err:
                     print(
@@ -366,11 +366,13 @@ class Forecaster(object):
                 "The input dataset X must be a list of FixedIndexTimeseries objects with type and length %s" % self._X_type)
 
         featuredates = self._aggregate_featuredates(targetdate)
+        X_values = self._aggregate_features(featuredates, X)
+
         if self._multimodel:
             annual_index = self._y.convert_to_annual_index(targetdate)
         else:
             annual_index = 1
-        X_values = self._aggregate_features(featuredates, X)
+
         if not self.trainingdates:
             raise self.ModelError(
                 "There is no trained model to be used for a prediciton. Call class method .train() first.")
@@ -382,21 +384,25 @@ class Forecaster(object):
             invtrans_prediction = self._y_scaler[annual_index - 1].inverse_transform(prediction.reshape(-1,1))
             return invtrans_prediction+self._seasonal[self._y.convert_to_annual_index(targetdate)-1]
 
-    def _predict_on_trainingset(self):
-        if not self.trainingdates:
-            self.train()
-
-        target = pandas.Series(index=self.trainingdates)
-        for date in target.index:
-            target[date] = self.predict(date, self._X)
-        predicted_ts = FixedIndexTimeseries(target.sort_index(), mode=self._y.mode)
-        targeted_ts = self._y
-        return Evaluator(targeted_ts, predicted_ts)
-
     def cross_validate(self, k_fold='auto'):
-        # UNDER DEVELOPMENT
-        # TODO Need to incoorporate self.trainingdates, otherwise min k_fold value is overestimated
-        self.indicate_progress(0)
+        """Conducts a crossvalidation on the Forecaster instance and returns an Evaluator instance.
+
+            Is used to measure the performance of the forecast. Uses the scikit K-Folds cross-validator without
+            shuffling.
+
+            Args:
+                k_fold: 'auto'(default) or an integer > 1, Defines in how many train/test sets the data are split. A small value
+                        is better to measure real model performance but takes much longer to compute. 'auto' will choose 10 splits
+                        or smaller depending on the size of the available dataset.
+            Returns:
+                An instance of the Evaluator class.
+
+            Raises:
+                ValueError: if k_fold is set to a value of <1 or is not an integer.
+                InsufficientData: is raised when the dataset contains too few samples for crossvalidation with
+                                    the chosen value of k_fold or if it only contains one sample.
+            """
+        #self.indicate_progress(0)
 
         y = []
 
@@ -413,7 +419,7 @@ class Forecaster(object):
             k_fold=min(groupsize,10)
             if k_fold==1:
                 raise self.InsufficientData(
-                    "There are not enough samples for cross validation. Please provide a large dataset"
+                    "There are not enough samples for cross validation. Please provide a larger dataset"
                 )
         elif k_fold==1 or not isinstance(k_fold,int):
             raise ValueError(
@@ -424,17 +430,17 @@ class Forecaster(object):
                 "There are not enough samples for cross validation with k_fold=%s. Please choose a lower value." %k_fold
             )
 
-        # Split each group with KFold into training and test sets (mixes annual index again, but with equal split )
-        maxsteps = len(y)+k_fold*10+1
-        t=1
-        self.indicate_progress(float(t)/maxsteps*100)
-        t+1
+        # Split each group with KFold into training and test sets
+        #maxsteps = len(y)+k_fold*10+1
+        #t=1
+        #self.indicate_progress(float(t)/maxsteps*100)
+        #t+1
         train = [pandas.Series()] * k_fold
         test = [pandas.Series()] * k_fold
         kf = KFold(n_splits=k_fold, shuffle=False)
         for i, values in enumerate(y):
-            self.indicate_progress(float(t) / maxsteps * 100)
-            t=t + 1
+            #self.indicate_progress(float(t) / maxsteps * 100)
+            #t=t + 1
             k = 0
             if len(y[i]) > 1:
                 for train_index, test_index in kf.split(y[i]):
@@ -446,8 +452,8 @@ class Forecaster(object):
         predictions = []
         dates = []
         for i, trainingset in enumerate(train):
-            self.indicate_progress(float(t) / maxsteps * 100)
-            t = t + 10
+            #self.indicate_progress(float(t) / maxsteps * 100)
+            #t = t + 10
             fc = Forecaster(clone(self._model[0]), FixedIndexTimeseries(trainingset, mode=self._y.mode), self._X,
                             self._laglength, self._lag, self._multimodel, self._decompose)
             fc.train()
@@ -469,3 +475,86 @@ class Forecaster(object):
 
     class ModelError(Exception):
         pass
+
+
+class SeasonalForecast(object):
+    #restructure into methods: train, evaluate, forecast
+    def __init__(self, model, target, Qm, Pm, Tm, Sm, forecast_month):
+         if len(target.mode) < 5:
+             raise Exception("SeasonalForecast is limited to y of mode seasonal.")
+         for item in [Qm,Pm,Tm,Sm]:
+             if item.mode is not 'm':
+                 raise Exception("features must be of mode 'm")
+
+         self.model = model
+         self.y = target
+
+         self.last_month = forecast_month-1
+         self.first_month = 11
+
+         # Create composite features
+         STm = Sm.multiply(Tm)
+         SPm = Sm.multiply(Pm)
+         TPm = Tm.multiply(Pm)
+         STPm = STm.multiply(Pm)
+
+         self.features = [Qm,Pm,Tm,Sm,STm,SPm,TPm,STPm]
+
+         # Create sets of monthly feature aggregates from first_month to last_month
+         monthly_aggregates = [str(i).zfill(2) + "-" + str(i).zfill(2) for i in range(self.first_month, 13)]
+         monthly_aggregates += [str(i).zfill(2)+"-"+str(i).zfill(2) for i in range (1,self.last_month+1)]
+         monthly_aggregates += [str(i).zfill(2) + "-" + str(self.last_month).zfill(2) for i in range(1, self.last_month)]
+         if self.last_month > 0:
+            monthly_aggregates += [str(i).zfill(2) + "-" + str(self.last_month).zfill(2) for i in range(self.first_month, 13)]
+         else:
+             monthly_aggregates += [str(i).zfill(2) + "-" + str(12).zfill(2) for i in range(self.first_month, 13)]
+         monthly_aggregates = list(set(monthly_aggregates))
+
+         feature_aggregates = []
+         feature_aggregates_index = []
+         for feature in self.features:
+             feature_aggregates.append([self.downsample_helper(feature,aggregate) for aggregate in monthly_aggregates])
+             feature_aggregates_index.append([None]+range(0,len(monthly_aggregates)))
+
+
+         feature_iterator = itertools.product(*feature_aggregates_index)
+         feature_iterator = itertools.ifilter(lambda x: 4 < x.count(None), feature_iterator)
+         i=0
+         results = [9999]*20
+         FC_objs = [None]*20
+         for item in feature_iterator:
+             feature_list = map(lambda x: feature_aggregates[x][item[x]] if item[x] is not None else None, range(0,len(feature_aggregates)))
+             feature_list = filter(None,feature_list)
+             if len(feature_list) > 0:
+                FC_obj = Forecaster(self.model, self.y, feature_list,lag=0, laglength=[1]*len(feature_list), multimodel=False, decompose=False)
+                CV = FC_obj.cross_validate()
+                score = CV.computeRelError()[0].mean()
+                if score < max(results):
+                    index = results.index(max(results))
+                    results[index] = score
+                    FC_objs[index] = FC_obj
+
+                i=i+1
+                print(str(i)+'/43165 : '+ str(score))
+         return FC_objs
+
+    @staticmethod
+    def downsample_helper(timeseries,mode):
+        res = mode.split("-")
+        if int(res[0]) > int(res[1]):
+            mode1 = res[0]+'-12'
+            weight1 = 13-int(res[0])
+            aggregate1 = timeseries.downsample(mode1)
+            shifted_index = aggregate1.timeseries.index.values + monthdelta(weight1)
+            aggregate1.timeseries.index = shifted_index
+
+            mode2 = '01-'+res[1]
+            weight2 = int(res[1])
+            aggregate2 = timeseries.downsample(mode2)
+
+            timeseries = (aggregate1.timeseries*weight1).add(aggregate2.timeseries*weight2)/(weight1+weight2)
+            return FixedIndexTimeseries(timeseries, mode=mode2, label=mode)
+        else:
+            return timeseries.downsample(mode)
+
+
