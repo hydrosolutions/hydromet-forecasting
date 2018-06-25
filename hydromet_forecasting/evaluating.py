@@ -134,7 +134,7 @@ class Evaluator(object):
                     Raises:
                         None
                     """
-        count = [0]*self.y_clean.maxindex
+        count = list()
         for index in range(1, self.y_clean.maxindex+1):
             count.append(len(self.forecast.data_by_index(index)))
         return count
@@ -215,10 +215,10 @@ class Evaluator(object):
     def table_summary(self):
         data =dict({
             'Number of training data': self.trainingdata_count(),
-            'Minimum':self.min(self._y),
-            'Norm':self.norm(self._y),
-            'Maximum':self.max(self._y),
-            '+/- d': self.stdev_s(self._y),
+            'Minimum':self._y.min(),
+            'Norm':self._y.norm(),
+            'Maximum':self._y.max(),
+            '+/- d': self._y.stdev_s(),
             'P%': self.computeP()
         })
         df=pandas.DataFrame(data)
