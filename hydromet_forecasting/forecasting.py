@@ -403,7 +403,6 @@ class Forecaster(object):
                                     the chosen value of k_fold or if it only contains one sample.
             """
         #self.indicate_progress(0)
-
         y = []
 
         # Aggregate data into groups for each annualindex
@@ -412,7 +411,6 @@ class Forecaster(object):
                 y.append(self._y.data_by_index(i + 1))
         else:
             y.append(self._y.timeseries)
-
         # Check if each group has enough samples for the value of k_fold
         groupsize = map(len,y)
         if k_fold=='auto':
@@ -429,7 +427,6 @@ class Forecaster(object):
             raise self.InsufficientData(
                 "There are not enough samples for cross validation with k_fold=%s. Please choose a lower value." %k_fold
             )
-
         # Split each group with KFold into training and test sets
         #maxsteps = len(y)+k_fold*10+1
         #t=1
@@ -500,6 +497,9 @@ class SeasonalForecast(object):
 
          self.features = [Qm,Pm,Tm,Sm,STm,SPm,TPm,STPm]
 
+         self._selectedmodels = None
+
+    def train(self):
          # Create sets of monthly feature aggregates from first_month to last_month
          monthly_aggregates = [str(i).zfill(2) + "-" + str(i).zfill(2) for i in range(self.first_month, 13)]
          monthly_aggregates += [str(i).zfill(2)+"-"+str(i).zfill(2) for i in range (1,self.last_month+1)]
@@ -520,23 +520,29 @@ class SeasonalForecast(object):
          feature_iterator = itertools.product(*feature_aggregates_index)
          feature_iterator = itertools.ifilter(lambda x: 4 < x.count(None), feature_iterator)
          i=0
-         results = [9999]*20
+         scores = [9999]*20
          FC_objs = [None]*20
+         features = [None] * 20
          for item in feature_iterator:
              feature_list = map(lambda x: feature_aggregates[x][item[x]] if item[x] is not None else None, range(0,len(feature_aggregates)))
              feature_list = filter(None,feature_list)
              if len(feature_list) > 0:
                 FC_obj = Forecaster(self.model, self.y, feature_list,lag=0, laglength=[1]*len(feature_list), multimodel=False, decompose=False)
                 CV = FC_obj.cross_validate()
-                score = CV.computeRelError()[0].mean()
-                if score < max(results):
-                    index = results.index(max(results))
-                    results[index] = score
+                score = mean(CV.computeRelError())
+                if score < max(scores):
+                    index = scores.index(max(scores))
+                    scores[index] = score
                     FC_objs[index] = FC_obj
-
+                    features[index] = [monthly_aggregates[k] if k is not None else None for k in item]
                 i=i+1
                 print(str(i)+'/43165 : '+ str(score))
-         return FC_objs
+
+         self._selectedmodels = FC_objs
+         self._selectedfeatures = features
+         self._score = scores
+         return None
+
 
     @staticmethod
     def downsample_helper(timeseries,mode):
@@ -556,5 +562,9 @@ class SeasonalForecast(object):
             return FixedIndexTimeseries(timeseries, mode=mode2, label=mode)
         else:
             return timeseries.downsample(mode)
+
+    class ModelError(Exception):
+        pass
+
 
 

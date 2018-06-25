@@ -42,7 +42,7 @@ class Evaluator(object):
 
         self.y_clean=FixedIndexTimeseries(self._y.timeseries[self.forecast.timeseries.index], mode=self._y.mode)
 
-        datagroups = [len(self.forecast.data_by_index(i)) for i in range(0,self.forecast.maxindex)]
+        datagroups = [len(self.forecast.data_by_index(i)) for i in range(1,self.forecast.maxindex+1)]
         if min(datagroups)<2:
             raise self.InsufficientData("The length of the forecasted timeseries is not sufficient.")
 
@@ -162,7 +162,7 @@ class Evaluator(object):
         norm = self._y.max()
         min = self._y.min()
         max = self._y.max()
-        stdev = self._y.stdev()
+        stdev = self._y.stdev_s()
         fig, ax = self.prepare_figure()
         ax.plot(norm,label="norm")
         ax.plot(min, label="min")

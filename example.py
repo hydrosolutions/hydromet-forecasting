@@ -63,4 +63,5 @@ Talas_S = Talas_S.downsample('m')
 #CV.write_html(filename="output/test3.html")
 
 Objs = SeasonalForecast(model,Talas_Q.downsample('04-08'),Talas_Q,Talas_P,Talas_T,Talas_S,forecast_month=4)
+Objs.train()
 pass
