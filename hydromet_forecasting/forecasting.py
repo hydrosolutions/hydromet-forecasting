@@ -183,7 +183,7 @@ class Forecaster(object):
                 ValueError: When the list "laglength" is of different length than the list X.
             """
 
-        self._model = model
+        self._model = clone(model)
         self._multimodel = multimodel
 
         if not self._multimodel:
@@ -476,12 +476,9 @@ class Forecaster(object):
 
 class SeasonalForecast(object):
     #restructure into methods: train, evaluate, forecast
-    def __init__(self, model, target, Qm, Pm, Tm, Sm, forecast_month):
+    def __init__(self, model, forecast_month, target, Qm, Pm=None, Tm=None, Sm=None):
          if len(target.mode) < 5:
              raise Exception("SeasonalForecast is limited to y of mode seasonal.")
-         for item in [Qm,Pm,Tm,Sm]:
-             if item.mode is not 'm':
-                 raise Exception("features must be of mode 'm")
 
          self.model = model
          self.y = target
@@ -490,14 +487,17 @@ class SeasonalForecast(object):
          self.first_month = 11
 
          # Create composite features
-         STm = Sm.multiply(Tm)
-         SPm = Sm.multiply(Pm)
-         TPm = Tm.multiply(Pm)
-         STPm = STm.multiply(Pm)
+         STm = Sm.multiply(Tm) if Sm and Tm else None
+         SPm = Sm.multiply(Pm) if Sm and Pm else None
+         TPm = Tm.multiply(Pm) if Tm and Pm else None
+         STPm = STm.multiply(Pm) if STm and Pm else None
 
          self.features = [Qm,Pm,Tm,Sm,STm,SPm,TPm,STPm]
+         self._featurenames = ["Qm", "Pm", "Tm", "Sm", "STm", "SPm", "TPm", "STPm"]
 
          self._selectedmodels = None
+         self._selectedfeatures = None
+         self._score = None
 
     def train(self):
          # Create sets of monthly feature aggregates from first_month to last_month
@@ -512,13 +512,13 @@ class SeasonalForecast(object):
 
          feature_aggregates = []
          feature_aggregates_index = []
-         for feature in self.features:
+         for feature in filter(None,self.features):
              feature_aggregates.append([self.downsample_helper(feature,aggregate) for aggregate in monthly_aggregates])
              feature_aggregates_index.append([None]+range(0,len(monthly_aggregates)))
 
 
          feature_iterator = itertools.product(*feature_aggregates_index)
-         feature_iterator = itertools.ifilter(lambda x: 4 < x.count(None), feature_iterator)
+         feature_iterator = itertools.ifilter(lambda x: len(filter(None,self.features))-5 < x.count(None), feature_iterator)
          i=0
          scores = [9999]*20
          FC_objs = [None]*20
@@ -538,11 +538,37 @@ class SeasonalForecast(object):
                 i=i+1
                 print(str(i)+'/43165 : '+ str(score))
 
+         for model in FC_objs:
+            model.train()
+
          self._selectedmodels = FC_objs
          self._selectedfeatures = features
          self._score = scores
          return None
 
+    def predict(self, targetdate, Qm, Pm=None, Tm=None, Sm=None):
+
+        for item in [Qm, Pm, Tm, Sm]:
+            if item is not None and item.mode is not 'm':
+                raise Exception("features must be of mode 'm")
+
+        STm = Sm.multiply(Tm) if Sm and Tm else None
+        SPm = Sm.multiply(Pm) if Sm and Pm else None
+        TPm = Tm.multiply(Pm) if Tm and Pm else None
+        STPm = STm.multiply(Pm) if STm and Pm else None
+
+        features = [Qm, Pm, Tm, Sm, STm, SPm, TPm, STPm]
+        for i, feature in enumerate(features):
+            if self.features[i] is not None and feature is None:
+                raise ValueError("The feature "+self._featurenames[i]+" was not found in arguments")
+        features = filter(None, features)
+        pred=list()
+        for i,FC_obj in enumerate(self._selectedmodels):
+            featureindex = self._selectedfeatures[i]
+            feature_list = [self.downsample_helper(features[i],x) if x is not None else None for i,x in enumerate(featureindex)]
+            feature_list = filter(None, feature_list)
+            pred.append(FC_obj.predict(datetime.date(2011,4,1),feature_list))
+        return(pred)
 
     @staticmethod
     def downsample_helper(timeseries,mode):
