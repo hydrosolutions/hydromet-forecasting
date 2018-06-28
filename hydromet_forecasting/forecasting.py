@@ -15,6 +15,8 @@ from monthdelta import monthdelta
 from stldecompose import decompose as decomp
 import itertools
 
+import scipy.special as scisp
+
 class RegressionModel(object):
     """Sets up the Predictor Model from sklearn, etc.
 
@@ -147,7 +149,7 @@ class Forecaster(object):
     periods and that every period takes the same position in every year, e.g. monthes or semi-monthes etc. It does
     not work for timeseries with periods of strict length and as such, might overlap New Year.
     However, if the option multimodel is set to False, it can work with arbitrary timeseries that are handled by a class
-    that replicates the methods in FixedIndexDateUtil.
+    that replicates the methods in FixedIndexTimeseries.
 
     Attributes:
         trainingdates: a list of datetime.date objects of the periods whcih where used for training. Is None before training
@@ -475,82 +477,183 @@ class Forecaster(object):
 
 
 class SeasonalForecast(object):
-    #restructure into methods: train, evaluate, forecast
-    def __init__(self, model, forecast_month, target, Qm, Pm=None, Tm=None, Sm=None):
-         if len(target.mode) < 5:
-             raise Exception("SeasonalForecast is limited to y of mode seasonal.")
+    """Forecasting class for Seasonal Discharge, developed on the basis of the Paper
+    <Statistical forecast of seasonal discharge in Central Asia using observational records: development of a generic linear modelling tool for operational water resource management.>
+    by Heiko Apel et al.
 
-         self.model = model
-         self.y = target
+    The class does gridsearch all possible feature-timeslice combinations and chooses the best n_model (default=20) models.
+    Because of this approach, the training process takes much longer, up to several hours depending on the number of features to choose from.
 
-         self.last_month = forecast_month-1
-         self.first_month = 11
+    Attributes TODO :
+        model: a list of datetime.date objects of the periods whcih where used for training. Is None before training
+        evaluator: An Evaluator object of the current training state of the Forecaster instance. Is None before training
+    """
 
-         # Create composite features
-         STm = Sm.multiply(Tm) if Sm and Tm else None
-         SPm = Sm.multiply(Pm) if Sm and Pm else None
-         TPm = Tm.multiply(Pm) if Tm and Pm else None
-         STPm = STm.multiply(Pm) if STm and Pm else None
+    def __init__(self, forecast_month, model, target, Qm, Pm=None, Tm=None, Sm=None, n_model=20, max_features=3, earliest_month=None):
+        """Initialising the SeasonalForecaster Instance
 
-         self.features = [Qm,Pm,Tm,Sm,STm,SPm,TPm,STPm]
-         self._featurenames = ["Qm", "Pm", "Tm", "Sm", "STm", "SPm", "TPm", "STPm"]
+            Args:
+                model: A model instance that knows the method fit() and predict() for
+                        a targetvector y and a feature array X
+                forecast_month: Integer 1..11. Defines in which month the forecast is produced, and as such, defines what data are available.
+                target: A FixedIndexTimeseries Instances which has a seasonal mode, e.g. '04-08'
+                Qm (required): A FixedIndexTimeseries Instances which has a monthly mode and describes Discharge
+                Pm: A FixedIndexTimeseries Instances which has a monthly mode and describes Precipitation
+                Tm: A FixedIndexTimeseries Instances which has a monthly mode and describes Temperature
+                Sm: A FixedIndexTimeseries Instances which has a monthly mode and describes Snowcover
+                n_model (integer:1-100): The number of best models that are selected from the gridsearch.
+                max_features (integer:1..8): The maximum number of features that are used for building a regression model
+                        resp. complexity of the regression model. The higher this number, the longer will the grid search take.
+                earliest_month (integer 1..12). Limits the first month from which on feature timewindow will be selected.
+                        Default is None: The first month after the last month included in target: e.g. target mode = '04-08', earliest_month will be 9.
 
-         self._selectedmodels = None
-         self._selectedfeatures = None
-         self._score = None
+            Returns:
+                A Forecaster instance with the methods train, predict and cross_validate
 
-    def train(self):
-         # Create sets of monthly feature aggregates from first_month to last_month
-         monthly_aggregates = [str(i).zfill(2) + "-" + str(i).zfill(2) for i in range(self.first_month, 13)]
-         monthly_aggregates += [str(i).zfill(2)+"-"+str(i).zfill(2) for i in range (1,self.last_month+1)]
-         monthly_aggregates += [str(i).zfill(2) + "-" + str(self.last_month).zfill(2) for i in range(1, self.last_month)]
-         if self.last_month > 0:
-            monthly_aggregates += [str(i).zfill(2) + "-" + str(self.last_month).zfill(2) for i in range(self.first_month, 13)]
-         else:
-             monthly_aggregates += [str(i).zfill(2) + "-" + str(12).zfill(2) for i in range(self.first_month, 13)]
-         monthly_aggregates = list(set(monthly_aggregates))
+            Raises:
+                ValueError: When the value for earliest_month is not within a valid range between last month of target season and forecasting_month
+                ValueError: When the forecast month is not valid resp. within the allowed range of 1..first month of target season-1
+                ValueError: When the values n_model exceed the valid range of 1..100
+            """
+        if len(target.mode) < 5:
+            raise ValueError("SeasonalForecast is limited to y of mode seasonal.")
 
-         feature_aggregates = []
-         feature_aggregates_index = []
-         for feature in filter(None,self.features):
-             feature_aggregates.append([self.downsample_helper(feature,aggregate) for aggregate in monthly_aggregates])
-             feature_aggregates_index.append([None]+range(0,len(monthly_aggregates)))
+        self.model = model
+        self.y = target
+
+        if 0 < n_model < 101:
+            self.n_model = n_model
+        else:
+            raise ValueError("n_model must be in the range 1...100")
+
+        self.max_features = max_features
+
+        if  target.mode.split('-')[0] > forecast_month > 0:
+            self.last_month = forecast_month-1
+        else:
+            raise ValueError("The argument forecast_month does need to be in between 0 and the first month of the forecasted season")
+
+        self.feature_year_step = True
+        if earliest_month is None:
+            self.first_month = int(target.mode.split('-')[1])+1
+        elif int(target.mode.split('-')[1]) < earliest_month < 12:
+            self.first_month = earliest_month
+        elif self.last_month >= earliest_month > 0:
+            self.feature_year_step = False
+            self.first_month = earliest_month
+        else:
+            raise ValueError('The argument earliest_month is not valid.')
+
+        # Create composite features
+        STm = Sm.multiply(Tm) if Sm and Tm else None
+        SPm = Sm.multiply(Pm) if Sm and Pm else None
+        TPm = Tm.multiply(Pm) if Tm and Pm else None
+        STPm = STm.multiply(Pm) if STm and Pm else None
+
+        self.features = [Qm,Pm,Tm,Sm,STm,SPm,TPm,STPm]
+        self._featurenames = ["Qm", "Pm", "Tm", "Sm", "STm", "SPm", "TPm", "STPm"]
+
+        self._selectedmodels = None
+        self._selectedfeatures = None
+        self._score = None
+
+    def train(self, feedback_function = None):
+        """Trains the model with X and y as training set
+
+            Args:
+                feedback_function (default: None): A function that is called during the execution to report on progress. Must take the arguments i (current step) and i_max(max iterations)
+
+            Returns:
+                None
+
+            Raises:
+                InsufficientData: is raised when there is not enough data to train the model for one complete year.
+                    """
+
+        if not feedback_function:
+            feedback_function = self.no_progress
+
+        if self.feature_year_step:
+            monthly_timeslices = [str(i).zfill(2) + "-" + str(i).zfill(2) for i in range(self.first_month, 13)]
+            monthly_timeslices += [str(self.first_month).zfill(2) + "-" + str(i).zfill(2) for i in range(self.first_month+1, 13)]
+            monthly_timeslices += [str(i).zfill(2) + "-" + str(i).zfill(2) for i in range(1, self.last_month)]
+            monthly_timeslices += [str(self.first_month).zfill(2) + "-" + str(i).zfill(2) for i in range(1, self.last_month)]
+        else:
+            monthly_timeslices = [str(i).zfill(2) + "-" + str(i).zfill(2) for i in range(self.first_month, self.last_month + 1)]
+            monthly_timeslices += [str(self.first_month).zfill(2) + "-" + str(i).zfill(2) for i in range(self.first_month + 1, self.last_month + 1)]
+
+        n = len(monthly_timeslices)
+        feature_aggregates = []
+        feature_aggregates_index = []
+        for feature in filter(None,self.features):
+            feature_aggregates.append([self.downsample_helper(feature,aggregate) for aggregate in monthly_timeslices])
+            feature_aggregates_index.append([None]+range(0,len(monthly_timeslices)))
 
 
-         feature_iterator = itertools.product(*feature_aggregates_index)
-         feature_iterator = itertools.ifilter(lambda x: len(filter(None,self.features))-5 < x.count(None), feature_iterator)
-         i=0
-         scores = [9999]*20
-         FC_objs = [None]*20
-         features = [None] * 20
-         for item in feature_iterator:
-             feature_list = map(lambda x: feature_aggregates[x][item[x]] if item[x] is not None else None, range(0,len(feature_aggregates)))
-             feature_list = filter(None,feature_list)
-             if len(feature_list) > 0:
+        k = len(feature_aggregates)
+        qmin = len(filter(None,self.features)) - (self.max_features+1)
+        feature_iterator = itertools.product(*feature_aggregates_index)
+        feature_iterator = itertools.ifilter(lambda x: qmin < x.count(None), feature_iterator)
+        # formula for the number of possible combinations, tough brain work to find out *sweating..., -1 to substract (None,None,None,...)
+        max_iterations = sum([(n)**(k-q)*scisp.binom(k,k-q) for q in range(qmin+1,k+1)]) - 1
+
+        i=0
+        score=nan
+        scores = [float('inf')]*self.n_model
+        FC_objs = [None]*self.n_model
+        features = [None]*self.n_model
+
+        for item in feature_iterator:
+
+            feature_list = map(lambda x: feature_aggregates[x][item[x]] if item[x] is not None else None, range(0,len(feature_aggregates)))
+            feature_list = filter(None,feature_list)
+
+            if len(feature_list) > 0:
                 FC_obj = Forecaster(self.model, self.y, feature_list,lag=0, laglength=[1]*len(feature_list), multimodel=False, decompose=False)
-                CV = FC_obj.cross_validate()
-                score = mean(CV.computeRelError())
-                if score < max(scores):
-                    index = scores.index(max(scores))
-                    scores[index] = score
-                    FC_objs[index] = FC_obj
-                    features[index] = [monthly_aggregates[k] if k is not None else None for k in item]
-                i=i+1
-                print(str(i)+'/43165 : '+ str(score))
+                try:
+                    CV = FC_obj.cross_validate()
+                    score = mean(CV.computeRelError())
+                    if score < max(scores):
+                        index = scores.index(max(scores))
+                        scores[index] = score
+                        FC_objs[index] = FC_obj
+                        features[index] = [monthly_timeslices[k] if k is not None else None for k in item]
+                except:
+                    score = nan
 
-         for model in FC_objs:
+                i = i + 1
+                feedback_function(i,max_iterations)
+
+
+        for model in FC_objs:
             model.train()
 
-         self._selectedmodels = FC_objs
-         self._selectedfeatures = features
-         self._score = scores
-         return None
+        self._selectedmodels = FC_objs
+        self._selectedfeatures = features
+        self._score = scores
+        return None
 
     def predict(self, targetdate, Qm, Pm=None, Tm=None, Sm=None):
+        """Does a prediction with the trained model
+
+            Args:
+                targetdate: A datetime.date that is within the season to be forecasted.
+                Qm (required): A FixedIndexTimeseries Instances which has a monthly mode and describes Discharge. Needs to contain the necessary data to predict targetdate
+                Pm: A FixedIndexTimeseries Instances which has a monthly mode and describes Precipitation. Needs to contain the necessary data to predict targetdate
+                Tm: A FixedIndexTimeseries Instances which has a monthly mode and describes Temperature. Needs to contain the necessary data to predict targetdate
+                Sm: A FixedIndexTimeseries Instances which has a monthly mode and describes Snowcover. Needs to contain the necessary data to predict targetdate
+
+            Returns:
+                A list of length=n_model with all predictions as float. If the prediction of one model failed e.g. due to missing feature data, a value of nan is inserted
+
+            Raises:
+                ValueError: is raised when the Qm,Pm, Tm or Sm are not of monthly mode 'm'
+                InsufficientData: If not all the timeseries of Qm,Pm, Tm or Sm, that were given as argument in init call are passed to this function.
+                    """
 
         for item in [Qm, Pm, Tm, Sm]:
             if item is not None and item.mode is not 'm':
-                raise Exception("features must be of mode 'm")
+                raise ValueError("features must be of mode 'm")
 
         STm = Sm.multiply(Tm) if Sm and Tm else None
         SPm = Sm.multiply(Pm) if Sm and Pm else None
@@ -560,14 +663,17 @@ class SeasonalForecast(object):
         features = [Qm, Pm, Tm, Sm, STm, SPm, TPm, STPm]
         for i, feature in enumerate(features):
             if self.features[i] is not None and feature is None:
-                raise ValueError("The feature "+self._featurenames[i]+" was not found in arguments")
+                raise self.InsufficientData("The feature "+self._featurenames[i]+" was not found in arguments")
         features = filter(None, features)
         pred=list()
         for i,FC_obj in enumerate(self._selectedmodels):
             featureindex = self._selectedfeatures[i]
             feature_list = [self.downsample_helper(features[i],x) if x is not None else None for i,x in enumerate(featureindex)]
             feature_list = filter(None, feature_list)
-            pred.append(FC_obj.predict(datetime.date(2011,4,1),feature_list))
+            try:
+                pred.append(FC_obj.predict(datetime.date(2011,4,1),feature_list))
+            except:
+                pred.append(nan)
         return(pred)
 
     @staticmethod
@@ -591,6 +697,14 @@ class SeasonalForecast(object):
 
     class ModelError(Exception):
         pass
+
+    class InsufficientData(Exception):
+        pass
+
+    @staticmethod
+    def no_progress(i, i_max):
+        pass
+
 
 
 
