@@ -62,13 +62,15 @@ Talas_S = Talas_S.downsample('m')
 
 #CV.write_html(filename="output/test3.html")
 
-Objs = SeasonalForecast(model=model,target=Talas_Q.downsample('04-08'),Qm=Talas_Q,Pm=Talas_P,Sm=Talas_S,Tm=Talas_T,forecast_month=4, earliest_month=3, max_features=10, n_model=2)
+Objs = SeasonalForecast(model=model,target=Talas_Q.downsample('04-08'),Qm=Talas_Q,Pm=Talas_P,Sm=Talas_S,Tm=Talas_T,forecast_month=4, earliest_month=2, max_features=2, n_model=30)
 
 def print_progress(i,i_max):
     print(str(i) + ' of ' + str(int(i_max)))
 
 
 Objs.train(feedback_function=print_progress)
+CV = Objs.Evaluator()
+CV.write_html("/home/jules/Desktop/test.html")
 pred=Objs.predict(targetdate=datetime.date(2011,4,1),Qm=Talas_Q,Pm=Talas_P,Sm=Talas_S,Tm=Talas_T)
 print(pred)
 pass

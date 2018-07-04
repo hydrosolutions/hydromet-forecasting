@@ -1,4 +1,4 @@
-from numpy import nan, isnan, full, array, arange, corrcoef
+from numpy import nan, isnan, full, array, arange, corrcoef, mean
 from matplotlib import pyplot as plt
 import pandas
 from hydromet_forecasting.timeseries import FixedIndexTimeseries
@@ -167,7 +167,6 @@ class Evaluator(object):
         ax.plot(norm,label="norm")
         ax.plot(min, label="min")
         ax.plot(max, label="max")
-        ax.fill_between(norm-stdev,norm+stdev, label="stdev")
         plt.ylabel(self._y.label)
         return fig
 
@@ -266,3 +265,76 @@ class Evaluator(object):
         pass
 
 
+class SeasonalEvaluator(object):
+    def __init__(self, featurenames,selectedfeatures,modelEvaluators, score):
+        self.featurenames = featurenames
+        self.selectedfeatures = selectedfeatures
+        self.modelEvaluators = modelEvaluators
+        self.score = score
+
+    def prepare_figure(self, width=12, height=3):
+        fig, ax = plt.subplots(1, 1)
+        fig.set_figwidth(width)
+        fig.set_figheight(height)
+        return fig, ax
+
+    def table_summary(self):
+        index_best = self.score.index(min(self.score))
+        index_worst = self.score.index(max(self.score))
+        data =dict({
+            'Number of training data': int(mean([CV.trainingdata_count()[0] for CV in self.modelEvaluators])),
+            'Minimum':self.modelEvaluators[0]._y.min(),
+            'Norm':self.modelEvaluators[0]._y.norm(),
+            'Maximum':self.modelEvaluators[0]._y.max(),
+            '+/- d': self.modelEvaluators[0]._y.stdev_s(),
+            'STDEV/ERROR': mean([mean(CV.computeRelError()) for CV in self.modelEvaluators]),
+            'P%': mean([CV.computeP() for CV in self.modelEvaluators])
+        })
+        df=pandas.DataFrame(data)
+        return df.to_html()
+
+    def plot_timeseries(self):
+        fig, ax = self.prepare_figure()
+        [ax.plot(CV.forecast.timeseries, color='red', label="individual forecasts", alpha=.2) for CV in self.modelEvaluators]
+        df_concat = pandas.concat(([CV.forecast.timeseries for CV in self.modelEvaluators]))
+        by_row_index = df_concat.groupby(df_concat.index)
+        df_means = by_row_index.mean()
+        ax.plot(df_means, color='black', label='mean forecast')
+        ax.plot(self.modelEvaluators[0].y_clean.timeseries, color='green', label='observed')
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles[-3:], labels[-3:])
+        return fig
+
+    def write_html(self, filename):
+        """ writes an evaluation report to the specified filepath as an html
+
+            Args:
+                filename: path to the html file to be created
+
+            Returns:
+                None
+
+            Raises:
+                None
+            """
+        templatefilepath = path.join(path.dirname(__file__),'template')
+        with open(templatefilepath, 'r') as htmltemplate:
+            page=Template(htmltemplate.read())
+
+        encoded1=self.encode_figure(self.plot_timeseries())
+
+        table = self.table_summary()
+
+        htmlpage = open(filename, 'w')
+        htmlpage.write(page.safe_substitute(TABLE=table, IMAGE1=encoded1))
+        htmlpage.close()
+        return filename
+
+    def encode_figure(self, fig):
+
+        with tempfile.TemporaryFile(suffix=".png") as tmpfile:
+            fig.savefig(tmpfile, format="png")
+            tmpfile.seek(0)
+            encoded = base64.b64encode(tmpfile.read())
+            tmpfile.close()
+        return encoded

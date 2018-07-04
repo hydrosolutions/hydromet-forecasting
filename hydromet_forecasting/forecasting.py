@@ -7,7 +7,7 @@ from sklearn.base import clone
 from sklearn.model_selection import KFold
 
 from hydromet_forecasting.timeseries import FixedIndexTimeseries
-from hydromet_forecasting.evaluating import Evaluator
+from hydromet_forecasting.evaluating import Evaluator, SeasonalEvaluator
 
 from sklearn import preprocessing
 from monthdelta import monthdelta
@@ -570,13 +570,14 @@ class SeasonalForecast(object):
         feature_iterator = itertools.product(*feature_aggregates_index)
         feature_iterator = itertools.ifilter(lambda x: qmin < x.count(None), feature_iterator)
         # formula for the number of possible combinations, tough brain work to find out *sweating..., -1 to substract (None,None,None,...)
-        max_iterations = sum([(n)**(k-q)*scisp.binom(k,k-q) for q in range(qmin+1,k+1)]) - 1
+        max_iterations = int(sum([(n)**(k-q)*scisp.binom(k,k-q) for q in range(qmin+1,k+1)]) - 1)
 
         i=0
         score=nan
-        scores = [float('inf')]*self.n_model
-        FC_objs = [None]*self.n_model
-        features = [None]*self.n_model
+        n_model = min(self.n_model,max_iterations)
+        scores = [float('inf')]*n_model
+        FC_objs = [None]*n_model
+        features = [None]*n_model
 
         for item in feature_iterator:
 
@@ -650,6 +651,9 @@ class SeasonalForecast(object):
             except:
                 pred.append(nan)
         return(pred)
+
+    def Evaluator(self):
+        return SeasonalEvaluator(self._featurenames,self._selectedfeatures,[model.cross_validate() for model in self._selectedmodels], self._score)
 
     @staticmethod
     def downsample_helper(timeseries,mode):
