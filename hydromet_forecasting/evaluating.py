@@ -1,4 +1,4 @@
-from numpy import nan, isnan, full, array, arange, corrcoef, mean
+from numpy import nan, isnan, arange, corrcoef, mean
 from matplotlib import pyplot as plt
 import pandas
 from hydromet_forecasting.timeseries import FixedIndexTimeseries

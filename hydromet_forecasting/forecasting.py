@@ -361,7 +361,7 @@ class Forecaster(object):
             invtrans_prediction = self._y_scaler[annual_index - 1].inverse_transform(prediction.reshape(-1,1))
             return float(invtrans_prediction+self._seasonal[self._y.convert_to_annual_index(targetdate)-1])
 
-    def cross_validate(self, k_fold='auto'):
+    def evaluate(self, k_fold='auto', feedback_function=None):
         """Conducts a crossvalidation on the Forecaster instance and returns an Evaluator instance.
 
             Is used to measure the performance of the forecast. Uses the scikit K-Folds cross-validator without
@@ -379,7 +379,9 @@ class Forecaster(object):
                 InsufficientData: is raised when the dataset contains too few samples for crossvalidation with
                                     the chosen value of k_fold or if it only contains one sample.
             """
-        #self.indicate_progress(0)
+        if not feedback_function:
+            feedback_function = self.no_progress
+
         y = []
 
         # Aggregate data into groups for each annualindex
@@ -405,16 +407,13 @@ class Forecaster(object):
                 "There are not enough samples for cross validation with k_fold=%s. Please choose a lower value." %k_fold
             )
         # Split each group with KFold into training and test sets
-        #maxsteps = len(y)+k_fold*10+1
-        #t=1
-        #self.indicate_progress(float(t)/maxsteps*100)
-        #t+1
+        maxsteps = k_fold+1
+        t=1
+        feedback_function(t,maxsteps)
         train = [pandas.Series()] * k_fold
         test = [pandas.Series()] * k_fold
         kf = KFold(n_splits=k_fold, shuffle=False)
         for i, values in enumerate(y):
-            #self.indicate_progress(float(t) / maxsteps * 100)
-            #t=t + 1
             k = 0
             if len(y[i]) > 1:
                 for train_index, test_index in kf.split(y[i]):
@@ -426,8 +425,8 @@ class Forecaster(object):
         predictions = []
         dates = []
         for i, trainingset in enumerate(train):
-            #self.indicate_progress(float(t) / maxsteps * 100)
-            #t = t + 10
+            t = t + 1
+            feedback_function(t, maxsteps)
             fc = Forecaster(clone(self._model[0]), FixedIndexTimeseries(trainingset, mode=self._y.mode), self._X,
                             self._laglength, self._lag, self._multimodel, self._decompose)
             fc.train()
@@ -441,8 +440,14 @@ class Forecaster(object):
         targeted_ts = self._y
         return Evaluator(targeted_ts, predicted_ts)
 
-    def indicate_progress(self,p):
-        print("progress is %s%%" %(p))
+    @staticmethod
+    def no_progress(i, i_max):
+        pass
+
+    @staticmethod
+    def print_progress(i, i_max):
+        print(str(i) + ' of ' + str(int(i_max)))
+
 
     class InsufficientData(Exception):
         pass
@@ -587,7 +592,7 @@ class SeasonalForecast(object):
             if len(feature_list) > 0:
                 FC_obj = Forecaster(self.model, self.y, feature_list,lag=0, laglength=[1]*len(feature_list), multimodel=False, decompose=False)
                 try:
-                    CV = FC_obj.cross_validate()
+                    CV = FC_obj.evaluate()
                     score = mean(CV.computeRelError())
                     if score < max(scores):
                         index = scores.index(max(scores))
@@ -652,8 +657,8 @@ class SeasonalForecast(object):
                 pred.append(nan)
         return(pred)
 
-    def Evaluator(self):
-        return SeasonalEvaluator(self._featurenames,self._selectedfeatures,[model.cross_validate() for model in self._selectedmodels], self._score)
+    def evaluate(self):
+        return SeasonalEvaluator(self._featurenames, self._selectedfeatures, [model.evaluate() for model in self._selectedmodels], self._score)
 
     @staticmethod
     def downsample_helper(timeseries,mode):
@@ -687,6 +692,11 @@ class SeasonalForecast(object):
     @staticmethod
     def no_progress(i, i_max):
         pass
+
+    @staticmethod
+    def print_progress(i, i_max):
+        print(str(i) + ' of ' + str(int(i_max)))
+
 
 
 
