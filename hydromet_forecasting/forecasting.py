@@ -69,11 +69,9 @@ class RegressionModel(object):
             list_models(): Returns: dictionary of available models as name,value pairs """
 
         LinearRegression = 1
-        ExtraTreesRegressor = 2
-        SGDRegressor = 3
-        AdaBoostRegressor = 4
-        MLPRegressor = 5
-        Lasso = 6
+        Lasso = 2
+        ExtraTreesRegressor = 3
+
 
         @classmethod
         def list_models(self):
@@ -93,7 +91,7 @@ class RegressionModel(object):
                 instance of RegressionModel
 
             Raises:
-                None
+                ValueError: if model is not recognized
                     """
 
         if model == cls.SupportedModels.LinearRegression:
@@ -101,6 +99,11 @@ class RegressionModel(object):
             return cls(linear_model.LinearRegression,
                        {'fit_intercept': [True, False]},
                        {'fit_intercept': True})
+        elif model == cls.SupportedModels.Lasso:
+            from sklearn import linear_model
+            return cls(linear_model.Lasso,
+                       {'alpha': [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]},
+                       {'alpha': 1})
         elif model == cls.SupportedModels.ExtraTreesRegressor:
             from sklearn import ensemble
             return cls(ensemble.ExtraTreesRegressor,
@@ -108,36 +111,8 @@ class RegressionModel(object):
                         'random_state': range(1,10)},
                        {'n_estimators': 10,
                         'random_state': 1})
-        elif model == cls.SupportedModels.SGDRegressor:
-            from sklearn import linear_model
-            return cls(linear_model.SGDRegressor,
-                       {'loss': ['squared_loss', 'huber', 'epsilon_insensitive','squared_epsilon_insensitive'],
-                        'penalty': ['none', 'l2', 'l1', 'elasticnet']},
-                       {'loss': 'squared_loss',
-                        'penalty': 'l2'})
-        elif model == cls.SupportedModels.AdaBoostRegressor:
-            from sklearn import ensemble
-            return cls(ensemble.AdaBoostRegressor,
-                       {'base_estimator': ensemble.ExtraTreesRegressor(n_estimators=20),
-                        'n_estimators': range(1, 41, 1),
-                        'random_state': range(1,10)},
-                       {'base_estimator': ensemble.ExtraTreesRegressor(n_estimators=20),
-                        'n_estimators': 40,
-                        'random_state': 1})
-
-        elif model == cls.SupportedModels.MLPRegressor:
-            from sklearn import neural_network
-            return cls(neural_network.MLPRegressor,
-                       {'hidden_layer_sizes': range(1, 1000, 10),
-                        'activation': ['identity', 'logistic', 'tanh', 'relu']},
-                       {'hidden_layer_sizes': 10,
-                        'activation': 'logistic'})
-
-        elif model == cls.SupportedModels.Lasso:
-            from sklearn import linear_model
-            return cls(linear_model.Lasso,
-                       {'alpha': [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]},
-                       {'alpha': 1})
+        else:
+            raise ValueError
 
 class Forecaster(object):
     """Forecasting class for timeseries that can be handled/read by FixedIndexTimeseries.
@@ -384,7 +359,7 @@ class Forecaster(object):
             x_set = self._X_scaler[annual_index - 1].transform(X_values.reshape(1, -1))
             prediction = self._model[annual_index - 1].predict(x_set)
             invtrans_prediction = self._y_scaler[annual_index - 1].inverse_transform(prediction.reshape(-1,1))
-            return invtrans_prediction+self._seasonal[self._y.convert_to_annual_index(targetdate)-1]
+            return float(invtrans_prediction+self._seasonal[self._y.convert_to_annual_index(targetdate)-1])
 
     def cross_validate(self, k_fold='auto'):
         """Conducts a crossvalidation on the Forecaster instance and returns an Evaluator instance.
@@ -458,7 +433,7 @@ class Forecaster(object):
             fc.train()
             for target in test[i].iteritems():
                 try:
-                    predictions.append(fc.predict(target[0], self._X)[0,0])
+                    predictions.append(fc.predict(target[0], self._X))
                     dates.append(target[0])
                 except:
                     pass
@@ -678,6 +653,10 @@ class SeasonalForecast(object):
 
     @staticmethod
     def downsample_helper(timeseries,mode):
+        """ A workaround for FixedIndexTimeseries of mode seasonal that overlap new year e.g. '11-02', which is not natively handled by that class.
+
+            The returned FixedIndexTimeseries has mode '01-x' instead of e.g. '11-x', but the aggegrated data are averaged over the full timewindow.
+                    """
         res = mode.split("-")
         if int(res[0]) > int(res[1]):
             mode1 = res[0]+'-12'

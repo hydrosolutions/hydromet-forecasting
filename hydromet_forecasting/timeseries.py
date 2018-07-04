@@ -249,7 +249,6 @@ class FixedIndexTimeseries(object):
             """
 
         norm = []
-        #years = range(min(FixedIndexTimeseriesObj.timeseries.index).year, max(FixedIndexTimeseriesObj.timeseries.index).year + 1)
         if annualindex:
             indexrange = ([annualindex] if type(annualindex) == int else annualindex)
         else:
@@ -280,7 +279,6 @@ class FixedIndexTimeseries(object):
             """
 
         out = []
-        #years = range(min(FixedIndexTimeseries.timeseries.index).year, max(FixedIndexTimeseries.timeseries.index).year + 1)
         if annualindex:
             indexrange = ([annualindex] if type(annualindex) == int else annualindex)
         else:
@@ -311,7 +309,6 @@ class FixedIndexTimeseries(object):
             """
 
         out = []
-        #years = range(min(FixedIndexTimeseries.timeseries.index).year, max(FixedIndexTimeseries.timeseries.index).year + 1)
         if annualindex:
             indexrange = ([annualindex] if type(annualindex) == int else annualindex)
         else:
@@ -359,28 +356,88 @@ class FixedIndexTimeseries(object):
             return out
 
     def trend(self):
+        """Returns the trend component of the timeseries
+
+            Args:
+                None
+            Returns:
+                A FixedIndexTimeseries Object
+
+            Raises:
+                None
+            """
         dec = decompose(self.timeseries.values, period=self.maxindex)
         return FixedIndexTimeseries(pandas.Series(dec.trend, index=self.timeseries.index), mode=self.mode)
 
     def seasonal(self):
+        """Returns the seasonal component of the timeseries
+
+            Args:
+                None
+            Returns:
+                A FixedIndexTimeseries Object
+
+            Raises:
+                None
+            """
         dec = decompose(self.timeseries.values, period=self.maxindex)
         return FixedIndexTimeseries(pandas.Series(dec.seasonal, index=self.timeseries.index), mode=self.mode)
 
     def residual(self):
+        """Returns the residual (timeseries without trend and seasonal component) component of the timeseries
+
+            Args:
+                None
+            Returns:
+                A FixedIndexTimeseries Object
+
+            Raises:
+                None
+            """
         dec = decompose(self.timeseries.values, period=self.maxindex)
         return FixedIndexTimeseries(pandas.Series(dec.resid, index=self.timeseries.index), mode=self.mode)
 
     def detrend(self):
+        """Returns the timeseries without trend component
+
+            Args:
+                None
+            Returns:
+                A FixedIndexTimeseries Object
+
+            Raises:
+                None
+            """
         dec = decompose(self.timeseries.values, period=self.maxindex)
         return FixedIndexTimeseries(pandas.Series(dec.resid, index=self.timeseries.index)+pandas.Series(dec.seasonal, index=self.timeseries.index), mode=self.mode)
 
     def derivative(self):
+        """Returns the derivative of the timeseries
+
+            Args:
+                None
+            Returns:
+                A FixedIndexTimeseries Object
+
+            Raises:
+                None
+            """
         diff = self.timeseries.diff()
         delta_days = [(x-y).days for x, y in zip(self.timeseries.index, self.timeseries.index[1:])]
         derivative = -diff.drop(diff.index[0])/delta_days
         return FixedIndexTimeseries(derivative, mode=self.mode)
 
     def downsample(self, mode):
+        """Returns a timeseries with lower frequency than the original
+
+            Args:
+                mode: The mode of the target timeseries. Needs to be of lower frequency than the original timeseries.
+            Returns:
+                A FixedIndexTimeseries Object
+
+            Raises:
+                ValueError: If the timeseries can not be resampled to the requested frequency. Either it is is already of lowest mode=seasonal or the target mode is of higher frequency than the originalo mode
+            """
         if len(self.mode) > 2:
             raise ValueError('The timeseries can not be downsampled')
         if len(mode) > 1:
@@ -405,6 +462,16 @@ class FixedIndexTimeseries(object):
         return FixedIndexTimeseries(pandas.Series(values,newindex),mode=mode)
 
     def multiply(self, FixedIndexTimeseries_obj):
+        """Returns the timeseries multiplied by another timeseries
+
+            Args:
+                A FixedIndexTimeseries Object of the same mode.
+            Returns:
+                A FixedIndexTimeseries Object
+
+            Raises:
+                ModeError: If the mode of both timeseries is different.
+            """
         if self.mode is not FixedIndexTimeseries_obj.mode:
             raise self.ModeError("Both timeseries must be of the same mode")
 
