@@ -4,7 +4,7 @@ from math import floor
 from os.path import basename
 
 import pandas
-from numpy import nan
+from numpy import nan, isnan
 
 from stldecompose import decompose
 
@@ -223,14 +223,25 @@ class FixedIndexTimeseries(object):
         for index in indexrange:
             dates = map(self.firstday_of_period, years, len(years) * [index])
             try:
-                data = self.timeseries[dates]
-                data = data.dropna()
+                data = self.timeseries.reindex(dates).dropna()
                 out.append(data)
             except:
                 out.append([])
         if type(annualindex) == int:
             out = out[0]
 
+        return out
+
+    def data_by_year(self, year):
+
+        out = list()
+        for i in range(1,self.maxindex+1):
+            date = self.firstday_of_period(year=year,annual_index=i)
+            val = self.timeseries.reindex([date]).values[0]
+            if isnan(val):
+                out.append(nan)
+            else:
+                out.append(val)
         return out
 
     def norm(self, annualindex=None):
@@ -447,7 +458,7 @@ class FixedIndexTimeseries(object):
             raise ValueError('The target mode is of same or higher frequency than the source mode. Only downsampling is allowed.')
         else:
             dailyindex = pandas.date_range(self.timeseries.index.values[0], self.timeseries.index.values[-1], freq='D')
-            dailytimeseries = self.timeseries.reindex(dailyindex).interpolate('zero')
+            dailytimeseries = self.timeseries.reindex(dailyindex).interpolate('zero',limit=self.period)
             dummyInstance = FixedIndexTimeseries(pandas.Series(), mode=mode)
             beginyear = self.timeseries.index.values[0].year
             endyear = self.timeseries.index.values[-1].year
@@ -456,7 +467,7 @@ class FixedIndexTimeseries(object):
             for i,date in enumerate(newindex):
                 lastday = dummyInstance.lastday_of_period(date.year,dummyInstance.convert_to_annual_index(date))
                 try:
-                    values[i] = dailytimeseries.reindex(pandas.date_range(date,lastday,freq='D')).mean()
+                    values[i] = dailytimeseries.reindex(pandas.date_range(date,lastday,freq='D')).mean(skipna=False)
                 except:
                     pass
         return FixedIndexTimeseries(pandas.Series(values,newindex),mode=mode)
