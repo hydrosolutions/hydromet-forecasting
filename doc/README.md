@@ -143,3 +143,18 @@ PA_obj.write_html("assessment_report.html")
 prediction=FC_obj.predict(targetdate=datetime.date(2014,4,1),Qm=Talas_Q,Pm=Talas_P,Sm=Talas_S,Tm=Talas_T)
 print(prediction)
 ```
+
+
+### Evaluating
+
+#### Evaluator & SeasonalEvaluator
+
+An instance of those classes is returned when calling the method train_and_evaluate() of a Forecaster resp. SeasonalForecaster Instance. 
+The most important method is write_html(), which writes an assessment report to a specified path.
+
+```python
+PA_obj = FC_obj.train_and_evaluate()
+PA_obj.write_html(filename="assessment_report.html")
+```
+
+At the moment, the format of the report is defined by a static template.
