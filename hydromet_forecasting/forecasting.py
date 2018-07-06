@@ -361,7 +361,7 @@ class Forecaster(object):
             invtrans_prediction = self._y_scaler[annual_index - 1].inverse_transform(prediction.reshape(-1,1))
             return float(invtrans_prediction+self._seasonal[self._y.convert_to_annual_index(targetdate)-1])
 
-    def evaluate(self, k_fold='auto', feedback_function=None):
+    def train_and_evaluate(self, k_fold='auto', feedback_function=None):
         """Conducts a crossvalidation on the Forecaster instance and returns an Evaluator instance.
 
             Is used to measure the performance of the forecast. Uses the scikit K-Folds cross-validator without
@@ -371,6 +371,12 @@ class Forecaster(object):
                 k_fold: 'auto'(default) or an integer > 1, Defines in how many train/test sets the data are split. A small value
                         is better to measure real model performance but takes much longer to compute. 'auto' will choose 10 splits
                         or smaller depending on the size of the available dataset.
+                feedback_function (default=None): does report on the current state of the computation. A valid feedback_function
+                        must take the argument i and imax, whereby i is the current step and imax is the maximal, final step, e.g.:
+
+                        def print_progress(i, i_max):
+                            print(str(i) + ' of ' + str(int(i_max)))
+
             Returns:
                 An instance of the Evaluator class.
 
@@ -407,7 +413,7 @@ class Forecaster(object):
                 "There are not enough samples for cross validation with k_fold=%s. Please choose a lower value." %k_fold
             )
         # Split each group with KFold into training and test sets
-        maxsteps = k_fold+1
+        maxsteps = k_fold+2
         t=0
         feedback_function(t,maxsteps)
         train = [pandas.Series()] * k_fold
@@ -440,7 +446,11 @@ class Forecaster(object):
         targeted_ts = self._y
         t = t + 1
         feedback_function(t, maxsteps)
-        return Evaluator(targeted_ts, predicted_ts)
+        self.train()
+        t = t + 1
+        feedback_function(t, maxsteps)
+        self.Evaluator = Evaluator(targeted_ts, predicted_ts)
+        return self.Evaluator
 
     @staticmethod
     def no_progress(i, i_max):
@@ -458,7 +468,7 @@ class Forecaster(object):
         pass
 
 
-class SeasonalForecast(object):
+class SeasonalForecaster(object):
     """Forecasting class for Seasonal Discharge, developed on the basis of the Paper
     <Statistical forecast of seasonal discharge in Central Asia using observational records: development of a generic linear modelling tool for operational water resource management.>
     by Heiko Apel et al.
@@ -539,7 +549,7 @@ class SeasonalForecast(object):
         self._selectedfeatures = None
         self._score = None
 
-    def train(self, feedback_function = None):
+    def train_and_evaluate(self, feedback_function = None):
         """Trains the model with X and y as training set
 
             Args:
@@ -594,7 +604,7 @@ class SeasonalForecast(object):
             if len(feature_list) > 0:
                 FC_obj = Forecaster(self.model, self.y, feature_list,lag=0, laglength=[1]*len(feature_list), multimodel=False, decompose=False)
                 try:
-                    CV = FC_obj.evaluate()
+                    CV = FC_obj.train_and_evaluate()
                     score = mean(CV.computeRelError())
                     if score < max(scores):
                         index = scores.index(max(scores))
@@ -607,14 +617,11 @@ class SeasonalForecast(object):
                 i = i + 1
                 feedback_function(i,max_iterations)
 
-
-        for model in FC_objs:
-            model.train()
-
         self._selectedmodels = FC_objs
         self._selectedfeatures = features
         self._score = scores
-        return None
+        self.Evaluator = SeasonalEvaluator(self._featurenames, features,[model.Evaluator for model in self._selectedmodels], scores)
+        return self.Evaluator
 
     def predict(self, targetdate, Qm, Pm=None, Tm=None, Sm=None):
         """Does a prediction with the trained model
@@ -658,9 +665,6 @@ class SeasonalForecast(object):
             except:
                 pred.append(nan)
         return(pred)
-
-    def evaluate(self):
-        return SeasonalEvaluator(self._featurenames, self._selectedfeatures, [model.evaluate() for model in self._selectedmodels], self._score)
 
     @staticmethod
     def downsample_helper(timeseries,mode):
