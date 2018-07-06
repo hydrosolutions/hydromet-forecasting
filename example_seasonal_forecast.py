@@ -1,4 +1,4 @@
-from hydromet_forecasting.forecasting import RegressionModel, SeasonalForecast
+from hydromet_forecasting.forecasting import RegressionModel, SeasonalForecaster
 from hydromet_forecasting.timeseries import FixedIndexTimeseriesCSV
 import datetime
 
@@ -38,11 +38,10 @@ Talas_S = Talas_S.downsample(mode='m')
 # max_features=2 : limits the number of features per model to a maximum of 2
 # n_model=4 : The 4 best models are stored and used for forecasting
 # For demonstration purposes, the arguments here are optimized for a quick grid search. The resulting model performance is thus rather low.
-FC_obj = SeasonalForecast(model=model,target=Talas_Q.downsample('04-09'),Qm=Talas_Q,Pm=Talas_P,Sm=Talas_S,Tm=Talas_T,forecast_month=4, earliest_month=2, max_features=2, n_model=20)
+FC_obj = SeasonalForecaster(model=model, target=Talas_Q.downsample('04-09'), Qm=Talas_Q, Pm=Talas_P, Sm=Talas_S, Tm=Talas_T, forecast_month=4, earliest_month=2, max_features=2, n_model=20)
 
 # ---------------- STARTING THE GRIDSEARCH & OUTPUT A PERFORMANCE ASSESSMENT ----------------
-FC_obj.train(feedback_function=FC_obj.print_progress)
-PA_obj = FC_obj.evaluate()
+PA_obj = FC_obj.train_and_evaluate(feedback_function=FC_obj.print_progress)
 PA_obj.write_html("assessment_report.html")
 
 # ---------------- FORECAST ----------------

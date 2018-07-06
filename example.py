@@ -9,7 +9,7 @@ import datetime
 print(RegressionModel.SupportedModels.list_models())
 
 # Initialise a regression model class
-reg_model = RegressionModel.build_regression_model(RegressionModel.SupportedModels(1))
+reg_model = RegressionModel.build_regression_model(RegressionModel.SupportedModels(3))
 
 # Print default model parameters:
 print("Default parameters: %s" %reg_model.default_parameters)
@@ -31,14 +31,12 @@ temperature=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/T.csv"
 
 FC_obj = Forecaster(model=model,y=discharge,X=[discharge,temperature,precipitation],laglength=[3,3,3],lag=0,multimodel=True)
 
-# ---------------- OUTPUT A PERFORMANCE ASSESSMENT OF THE MODEL SETUP ----------------
-PA_obj = FC_obj.evaluate(feedback_function=FC_obj.print_progress)
+# ---------------- TRAIN & OUTPUT A PERFORMANCE ASSESSMENT OF THE MODEL SETUP ----------------
+PA_obj = FC_obj.train_and_evaluate(feedback_function=FC_obj.print_progress)
 PA_obj.write_html("assessment_report.html")
 
-# ---------------- TRAIN THE MODEL ----------------
-FC_obj.train()
 
 # ---------------- FORECAST ----------------
-prediction=FC_obj.predict(targetdate=datetime.date(2011,6,2),X=[discharge,temperature,precipitation])
+prediction=FC_obj.predict(targetdate=datetime.date(2011,6,1),X=[discharge,temperature,precipitation])
 print(prediction)
 
