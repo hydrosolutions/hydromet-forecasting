@@ -3,7 +3,7 @@
 
 ## Introduction
 
-The library is designed to automise and enhance the forecasting method, that the hydrometeorological agency in Kyrgyzstan produces for pentadal (5-day), decadal (10-day), monthly and seasonal timeseries of their river basins. Originally, these forecasts are produced manually, using MS Excel and expert knowledge. The module has been developed with the goal, to digitize the manual procedure and give space for some more experiments with additional data sources like snow timeseries and machine learning methods.
+The library is designed to automize and enhance the forecasting method, that the hydrometeorological agency in Kyrgyzstan applies for pentadal (5-day), decadal (10-day), monthly and seasonal timeseries of their river basins. Originally, these forecasts are produced manually, using MS Excel and expert knowledge. The module has been developed with the goal, to digitize the manual procedure and give space for some more experiments with additional data sources like snow timeseries and machine learning methods.
 The library has two distinguished methods for normal, continuous forecasts like monthly and another method (grid-search) for seasonal forecasting. The latter was implemented on the basis of this research paper by Heiko Apel et. al: https://www.hydrol-earth-syst-sci.net/22/2225/2018/
 
 ## Overview
@@ -81,6 +81,9 @@ This is the class for general forecasts resp. everything with lower frequency th
 
 A basic initialisation is:
 ```python
+discharge=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/Q.csv",mode="d")
+precipitation=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/P.csv",mode="d")
+temperature=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/T.csv",mode="d")
 FC_obj = Forecaster(model=model,y=discharge,X=[discharge,temperature,precipitation],laglength=[3,3,3])
 ```
 
@@ -98,7 +101,8 @@ The model can also be trained without evaluating it by calling train().  (Remark
 Finally, in order to make a prediction with the trained model. the function predict() is called.
 
 ```python
-prediction = FC_obj.predict(targetdate=datetime.date(2011,6,2),X=[discharge,temperature,precipitation])
+# forecast y for the first decade of June 2011
+prediction = FC_obj.predict(targetdate=datetime.date(2011,6,1),X=[discharge,temperature,precipitation])
 ```
  Two arguments need to be given:
  
@@ -131,7 +135,7 @@ PA_obj.write_html("assessment_report.html")
 * TODO explain other, optional arguments
 
 
-Training, evaluating and predicting is similar to the general Forecaster class. Depending on the model complexity, this train_and_evaluate might take a few hours:
+Training, evaluating and predicting is similar to the general Forecaster class. Depending on the model complexity,  train_and_evaluate() might take a few hours:
 ```python
 PA_obj = FC_obj.train_and_evaluate()
 PA_obj.write_html("assessment_report.html")
