@@ -128,9 +128,10 @@ PA_obj.write_html("assessment_report.html")
 * target: a FixedIndexTimeseries of seasonal mode, e.g. mode='04-09' for April to and including September
 * Qm, Pm, Sm, Tm are the feature timeseries and must have mode='m' resp. be of monthly frequency. Only Qm is stricly required, the others can be None, although the model performance will be very low in that case.
 * forecast_month: The month when the forecast is produced as integer. Defines which data are available to the model. If forecast_month=4, data from March and earlier are available to the model. (TODO: what if it is later than the season begin)
+* TODO explain other, optional arguments
 
 
-Training, evaluating and predicting is similar to the general Forecaster class:
+Training, evaluating and predicting is similar to the general Forecaster class. Depending on the model complexity, this train_and_evaluate might take a few hours:
 ```python
 PA_obj = FC_obj.train_and_evaluate()
 PA_obj.write_html("assessment_report.html")
