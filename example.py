@@ -33,7 +33,7 @@ FC_obj = Forecaster(model=model,y=discharge,X=[discharge,temperature,precipitati
 
 # ---------------- OUTPUT A PERFORMANCE ASSESSMENT OF THE MODEL SETUP ----------------
 PA_obj = FC_obj.evaluate(feedback_function=FC_obj.print_progress)
-PA_obj.write_html("output/assessment_report.html")
+PA_obj.write_html("assessment_report.html")
 
 # ---------------- TRAIN THE MODEL ----------------
 FC_obj.train()

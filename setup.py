@@ -19,4 +19,5 @@ setup(name='hydromet_forecasting',
           'stldecompose>=0.0.3',
           'monthdelta>=0.9.1'
       ],
-      zip_safe=False)
+      zip_safe=False,
+      include_package_data=True)

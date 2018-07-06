@@ -341,3 +341,4 @@ class SeasonalEvaluator(object):
             encoded = base64.b64encode(tmpfile.read())
             tmpfile.close()
         return encoded
+

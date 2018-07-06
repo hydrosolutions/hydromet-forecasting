@@ -43,7 +43,7 @@ FC_obj = SeasonalForecast(model=model,target=Talas_Q.downsample('04-09'),Qm=Tala
 # ---------------- STARTING THE GRIDSEARCH & OUTPUT A PERFORMANCE ASSESSMENT ----------------
 FC_obj.train(feedback_function=FC_obj.print_progress)
 PA_obj = FC_obj.evaluate()
-PA_obj.write_html("output/assessment_report.html")
+PA_obj.write_html("assessment_report.html")
 
 # ---------------- FORECAST ----------------
 # datetime.date(2014,4,1) refers to the target timewindow from April to September. datetime.date(2014,9,30) would give the same result.
