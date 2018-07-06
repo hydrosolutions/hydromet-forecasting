@@ -408,7 +408,7 @@ class Forecaster(object):
             )
         # Split each group with KFold into training and test sets
         maxsteps = k_fold+1
-        t=1
+        t=0
         feedback_function(t,maxsteps)
         train = [pandas.Series()] * k_fold
         test = [pandas.Series()] * k_fold
@@ -438,6 +438,8 @@ class Forecaster(object):
                     pass
         predicted_ts = FixedIndexTimeseries(pandas.Series(data=predictions, index=dates).sort_index(),mode=self._y.mode)
         targeted_ts = self._y
+        t = t + 1
+        feedback_function(t, maxsteps)
         return Evaluator(targeted_ts, predicted_ts)
 
     @staticmethod

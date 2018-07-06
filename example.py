@@ -23,9 +23,9 @@ model=reg_model.configure()  #{'n_estimators':20}
 # ---------------- LOADING TIMESERIES DATA FROM A FILE ----------------
 # modes: "m","d","p","dl" --> monthly, decadal, pentadal, daily
 
-discharge=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/Q.csv",mode="d")
-precipitation=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/P.csv",mode="d")
-temperature=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/T.csv",mode="d")
+discharge=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/Q.csv",mode="d").downsample('m')
+precipitation=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/P.csv",mode="d").downsample('m')
+temperature=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/T.csv",mode="d").downsample('m')
 
 # ---------------- INITIALISING THE  FORECASTING OBJECT ----------------
 
@@ -36,7 +36,7 @@ PA_obj = FC_obj.evaluate(feedback_function=FC_obj.print_progress)
 PA_obj.write_html("output/assessment_report.html")
 
 # ---------------- TRAIN THE MODEL ----------------
-FC_obj = FC_obj.train()
+FC_obj.train()
 
 # ---------------- FORECAST ----------------
 prediction=FC_obj.predict(targetdate=datetime.date(2011,6,2),X=[discharge,temperature,precipitation])

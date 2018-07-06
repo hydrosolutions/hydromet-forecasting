@@ -159,14 +159,18 @@ class Evaluator(object):
         return fig, ax
 
     def plot_y_stats(self):
-        norm = self._y.max()
-        min = self._y.min()
-        max = self._y.max()
+        norm = self._y.norm()
         stdev = self._y.stdev_s()
+        upper = [norm[i]+stdev[i] for i in range(0,len(stdev))]
+        lower = [norm[i]-stdev[i] for i in range(0,len(stdev))]
         fig, ax = self.prepare_figure()
-        ax.plot(norm,label="norm")
-        ax.plot(min, label="min")
-        ax.plot(max, label="max")
+        [ax.plot(self._y.data_by_year(year), label='individual years', color='blue', alpha=.2) for year in
+         range(self._y.timeseries.index[0].year, self._y.timeseries.index[-1].year + 1)]
+        ax.plot(upper, color='black')
+        ax.plot(lower, color='black',label="+/- STDEV")
+        ax.plot(norm,label="NORM", color='red')
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles[-3:], labels[-3:])
         plt.ylabel(self._y.label)
         return fig
 
@@ -239,16 +243,15 @@ class Evaluator(object):
         with open(templatefilepath, 'r') as htmltemplate:
             page=Template(htmltemplate.read())
 
-        encoded1=self.encode_figure(self.plot_trainingdata())
-        encoded2 = self.encode_figure(self.plot_y_stats())
-        encoded3 = self.encode_figure(self.plot_P())
-        encoded4 = self.encode_figure(self.plot_ts_comparison())
-        encoded5 = self.encode_figure(self.plot_RelError())
+        encoded1 = self.encode_figure(self.plot_y_stats())
+        encoded2 = self.encode_figure(self.plot_P())
+        encoded3 = self.encode_figure(self.plot_ts_comparison())
+        encoded4 = self.encode_figure(self.plot_RelError())
 
         table = self.table_summary()
 
         htmlpage = open(filename, 'w')
-        htmlpage.write(page.safe_substitute(TABLE=table,IMAGE1=encoded1,IMAGE2=encoded2,IMAGE3=encoded3,IMAGE4=encoded4,IMAGE5=encoded5))
+        htmlpage.write(page.safe_substitute(TABLE=table,IMAGE1=encoded1,IMAGE2=encoded2,IMAGE3=encoded3,IMAGE4=encoded4))
         htmlpage.close()
         return filename
 
