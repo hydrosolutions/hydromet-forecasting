@@ -7,8 +7,18 @@ The library is designed to automize and enhance the forecasting method, that the
 The library has two distinguished methods for normal, continuous forecasts like monthly and another method (grid-search) for seasonal forecasting. The latter was implemented on the basis of this research paper by Heiko Apel et. al: https://www.hydrol-earth-syst-sci.net/22/2225/2018/
 
 ## Overview
-The library is split into three parts: Timeseries, Forecasting and Evaluating
-### Timeseries
+The library is split into three modules: timeseries.py, forecasting.py and evaluating.py
+
+Setting up a forecast & predicting:
+
+1. Loading all relevant data as FixedIndexTimeseries instances from the timeseries.py module
+2. Initialising a RegressionModel instance  from the forecasting.py module with default or custom parameters.
+3. Initialising a Forecaster or Seasonal Forecaster instance from the forecasting.py module. Here, most of the relevant parameters are set. The RegressionModel from the previous step is given as argument for initialisation.
+4. Now, with the newly created Forecaster instance, the method train_and_evaluate is executed. This is the computationally most expensive step. The method will return an Evaluator resp. Seasonal Evaluator instance from the evaluating.py module. The Evaluator instance is as well stored as a Forecaster instance attribute .evaluator
+5. The Evaluator knows the method write_html(filename). It prints a perfromance assessment as html to the given filepath.
+6. A prediction is computed with the method predict(targetdate, X) of the trained Forecaster instance. X is the feature data.
+
+### timeseries.py
  Unfortunately, the pandas library does not support timeseries with decadal or pentadal frequency. For this reason, a new class was designed, that wraps around pandas to handle such frequencies.
  
 #### FixedIndexTimeseries
@@ -50,7 +60,7 @@ The timeseries frequency can be downsampled to a lower frequency, e.g. from mont
 seasonal_precipitation = precipitation.downsample(mode='04-09')
 ```
 
-### Forecasting
+### forecasting.py
 
 #### Regression Model (sklearn Estimator)
 
@@ -79,6 +89,8 @@ model=reg_model.configure({'n_estimators':20})
 #### Forecaster
 This is the class for general forecasts resp. everything with lower frequency than seasonal timeseries. It is initialised in minimum with an Regression Model Instance (see above), a target timeseries y (FixedIndexTimeseries Instance, see above), a list of feature timeseries X and a list of laglengths that correspond to the features. The laglength defines how many timelags of a feature are included in the forecast, e.g. for a monthly timeseries a value of 3 means the last 3 month. Additional parameters let you specify more details.
 
+*(Remark: y is the target, which is the value that will be predicted. X are the features, the data that are used to predict y. With timeseries, the values from the past are used to predict values from the future. This is the reason, why the dataset discharge can be both, target and feature. Previous values of discharge (how many is defined by the argument laglength) are used to predict its next value, together with past values of temperature and precipitation.)*
+
 A basic initialisation is:
 ```python
 discharge=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/Q.csv",mode="d")
@@ -86,6 +98,7 @@ precipitation=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/P.cs
 temperature=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/T.csv",mode="d")
 FC_obj = Forecaster(model=model,y=discharge,X=[discharge,temperature,precipitation],laglength=[3,3,3])
 ```
+
 
 In order to train this model, the method train_and_evaluate() is called. It returns an Evaluator (see below) instance, with which one can write an html report of the model performance. The model performance is assessed by a k-fold cross validation on is done using all available data. Depending on the amount of available data and complexity of the model, this process might take a while. The train_and_evaluate() function takes the argument feedback_function, which is triggered every step, e.g. can report on the current state of the computation. A valid feedback_function must take the argument i and i_max, whereby i is the current step and i_max is the maximal, final step.
 ```python
@@ -95,8 +108,6 @@ def print_percentage(i, i_max):
 PA_obj = FC_obj.train_and_evaluate(feedback_function=print_percentage)
 PA_obj.write_html("assessment_report.html")
 ```
-
-The model can also be trained without evaluating it by calling train().  (Remark: This function could be used in a further step to retrain the model as soons as there are new data, but no new evaluation report is required. For this another function will be implemented in the next version, allowing the update of the target and feature data. TODO)
 
 Finally, in order to make a prediction with the trained model. the function predict() is called.
 
@@ -111,7 +122,7 @@ prediction = FC_obj.predict(targetdate=datetime.date(2011,6,1),X=[discharge,temp
 
 #### SeasonalForecaster
 
-This Forecaster class has been designed to enhance the results of seasonal forecasts, where it is much more difficult to reach sufficient performance. A grid search tests all feature-timewindow combiantions and stores the best n models. For more details, read:
+This Forecaster class has been designed to enhance the results of seasonal forecasts, where it is much more difficult to reach sufficient performance. A grid search tests all feature-timewindow combinations and stores the best 20 models. For more details, read:
 >"Statistical forecast of seasonal discharge in Central Asia using observational records: development of a generic linear modelling tool for operational water resource management " by H. Apel et. al (https://www.hydrol-earth-syst-sci.net/22/2225/2018/)
 
 A SeasonalForecaster instance is initialised by: 
@@ -131,7 +142,7 @@ PA_obj.write_html("assessment_report.html")
 * model: A Regression Model Instance (see above)
 * target: a FixedIndexTimeseries of seasonal mode, e.g. mode='04-09' for April to and including September
 * Qm, Pm, Sm, Tm are the feature timeseries and must have mode='m' resp. be of monthly frequency. Only Qm is stricly required, the others can be None, although the model performance will be very low in that case.
-* forecast_month: The month when the forecast is produced as integer. Defines which data are available to the model. If forecast_month=4, data from March and earlier are available to the model. (TODO: what if it is later than the season begin)
+* forecast_month: The month when the forecast is produced as integer. Defines which data are available to the model. If forecast_month=3, data from February and earlier are available to the model. Must be smaller or equal to the first month of the target season.
 * TODO explain other, optional arguments
 
 
@@ -145,7 +156,7 @@ print(prediction)
 ```
 
 
-### Evaluating
+### evaluating.py
 
 #### Evaluator & SeasonalEvaluator
 
