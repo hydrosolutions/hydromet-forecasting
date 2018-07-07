@@ -72,10 +72,10 @@ class FixedIndexTimeseries(object):
             except:
                 raise ValueError("The given mode was not recognized. Check the docstring of the class for details.")
 
-        if self._check_timeseries(series):
+        if self.__check_timeseries(series):
             self.timeseries = series.sort_index()
         else:
-            raise self.ModeError(
+            raise self.__ModeError(
                 "The given series can not be recognized as a timeseries with frequency mode %s" % self.mode)
 
         if label == None:
@@ -83,12 +83,9 @@ class FixedIndexTimeseries(object):
         else:
             self.label = label
 
-        self.mode_order = ['dl','p','d','m']
+        self.__mode_order = ['dl', 'p', 'd', 'm']
 
-    class ModeError(Exception):
-        pass
-
-    def _check_timeseries(self, series):
+    def __check_timeseries(self, series):
         for i, item in series.iteritems():
             date = self.firstday_of_period(i.year, self.convert_to_annual_index(i))
             if not date == i:
@@ -452,9 +449,9 @@ class FixedIndexTimeseries(object):
         if len(self.mode) > 2:
             raise ValueError('The timeseries can not be downsampled')
         if len(mode) > 1:
-            self.mode_order.append(mode)
+            self.__mode_order.append(mode)
 
-        if self.mode_order.index(mode) <= self.mode_order.index(self.mode):
+        if self.__mode_order.index(mode) <= self.__mode_order.index(self.mode):
             raise ValueError('The target mode is of same or higher frequency than the source mode. Only downsampling is allowed.')
         else:
             dailyindex = pandas.date_range(self.timeseries.index.values[0], self.timeseries.index.values[-1], freq='D')
@@ -484,11 +481,14 @@ class FixedIndexTimeseries(object):
                 ModeError: If the mode of both timeseries is different.
             """
         if self.mode is not FixedIndexTimeseries_obj.mode:
-            raise self.ModeError("Both timeseries must be of the same mode")
+            raise self.__ModeError("Both timeseries must be of the same mode")
 
         res = self.timeseries.multiply(FixedIndexTimeseries_obj.timeseries)
         return FixedIndexTimeseries(res, mode = self.mode)
 
+
+    class __ModeError(Exception):
+        pass
 
 
 

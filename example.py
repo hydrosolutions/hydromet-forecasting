@@ -32,7 +32,8 @@ temperature=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/T.csv"
 FC_obj = Forecaster(model=model,y=discharge,X=[discharge,temperature,precipitation],laglength=[3,3,3],lag=0,multimodel=True)
 
 # ---------------- TRAIN & OUTPUT A PERFORMANCE ASSESSMENT OF THE MODEL SETUP ----------------
-PA_obj = FC_obj.train_and_evaluate(feedback_function=FC_obj.print_progress)
+def print_progress(i, i_max):  print(str(i) + ' of ' + str(int(i_max)))
+PA_obj = FC_obj.train_and_evaluate(feedback_function=print_progress)
 PA_obj.write_html("assessment_report.html")
 
 

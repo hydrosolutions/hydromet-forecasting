@@ -16,7 +16,7 @@ class Evaluator(object):
 
     Attributes:
         forecast: the forecasted timeseries
-        y_clean: the observed timeseries, reduced to the index of the forecasted timeseries
+        y_adj: the observed timeseries, reduced to the index of the forecasted timeseries
     """
 
     def __init__(self, y, forecast):
@@ -37,14 +37,14 @@ class Evaluator(object):
 
         if not y.mode == forecast.mode:
             raise ValueError("The target timeseries is not of the same mode as the forecasted timeseries.")
-        self._y = y
+        self.y = y
         self.forecast = forecast
 
-        self.y_clean=FixedIndexTimeseries(self._y.timeseries[self.forecast.timeseries.index], mode=self._y.mode)
+        self.y_adj=FixedIndexTimeseries(self.y.timeseries[self.forecast.timeseries.index], mode=self.y.mode)
 
         datagroups = [len(self.forecast.data_by_index(i)) for i in range(1,self.forecast.maxindex+1)]
         if min(datagroups)<2:
-            raise self.InsufficientData("The length of the forecasted timeseries is not sufficient.")
+            raise self.__InsufficientData("The length of the forecasted timeseries is not sufficient.")
 
 
     def computeP(self):
@@ -60,43 +60,18 @@ class Evaluator(object):
                 None
             """
         P = []
-        allowed_error = map(lambda x: x * 0.674, self._y.stdev_s())
-        years = range(min(self.y_clean.timeseries.index).year, max(self.y_clean.timeseries.index).year + 1)
-        for index in range(0, self.y_clean.maxindex):
-            dates = map(self.y_clean.firstday_of_period, years, len(years) * [index + 1])
+        allowed_error = map(lambda x: x * 0.674, self.y.stdev_s())
+        years = range(min(self.y_adj.timeseries.index).year, max(self.y_adj.timeseries.index).year + 1)
+        for index in range(0, self.y_adj.maxindex):
+            dates = map(self.y_adj.firstday_of_period, years, len(years) * [index + 1])
             try:
-                error = abs(self.forecast.timeseries.reindex(dates)[dates] - self.y_clean.timeseries.reindex(dates)[dates])
+                error = abs(self.forecast.timeseries.reindex(dates)[dates] - self.y_adj.timeseries.reindex(dates)[dates])
                 error = error.dropna()
                 good = sum(error <= allowed_error[index])
                 P.append(float(good) / len(error))
             except:
                 P.append(nan)
         return P
-
-    def computeRelError(self):
-        """ Returns the relative error value of the forecast (error / stde
-
-                    Args:
-                        None
-
-                    Returns:
-                        A list of values for each period of the year of the forecasted timeseries. NaN is retuned if the value could not be determined (e.g. not enough data)
-
-                    Raises:
-                        None
-                    """
-        relerror = []
-        stdev = self._y.stdev_s()
-        years = range(min(self.y_clean.timeseries.index).year, max(self.y_clean.timeseries.index).year + 1)
-        for index in range(0, self.y_clean.maxindex):
-            dates = map(self.y_clean.firstday_of_period, years, len(years) * [index + 1])
-            try:
-                error = abs(self.forecast.timeseries.reindex(dates)[dates] - self.y_clean.timeseries.reindex(dates)[dates])
-                error = error.dropna()
-                relerror.append(error.values/stdev[index])
-            except:
-                relerror.append(nan)
-        return relerror
 
     def computeRelError(self):
         """ Returns the relative error value of the forecast (error / stdev.sample)
@@ -111,12 +86,12 @@ class Evaluator(object):
                         None
                     """
         relerror = []
-        stdev = self._y.stdev_s()
-        years = range(min(self.y_clean.timeseries.index).year, max(self.y_clean.timeseries.index).year + 1)
-        for index in range(0, self.y_clean.maxindex):
-            dates = map(self.y_clean.firstday_of_period, years, len(years) * [index + 1])
+        stdev = self.y.stdev_s()
+        years = range(min(self.y_adj.timeseries.index).year, max(self.y_adj.timeseries.index).year + 1)
+        for index in range(0, self.y_adj.maxindex):
+            dates = map(self.y_adj.firstday_of_period, years, len(years) * [index + 1])
             try:
-                error = abs(self.forecast.timeseries.reindex(dates)[dates] - self.y_clean.timeseries.reindex(dates)[dates])
+                error = abs(self.forecast.timeseries.reindex(dates)[dates] - self.y_adj.timeseries.reindex(dates)[dates])
                 error = error.dropna()
                 relerror.append(error.values/stdev[index])
             except:
@@ -135,17 +110,17 @@ class Evaluator(object):
                         None
                     """
         count = list()
-        for index in range(1, self.y_clean.maxindex+1):
+        for index in range(1, self.y_adj.maxindex + 1):
             count.append(len(self.forecast.data_by_index(index)))
         return count
 
-    def prepare_figure(self, width=12, height=3):
+    def __prepare_figure(self, width=12, height=3):
 
         fig, ax = plt.subplots(1, 1)
         fig.set_figwidth(width)
         fig.set_figheight(height)
 
-        nr_bars=self._y.maxindex
+        nr_bars=self.y.maxindex
         periods_in_month=nr_bars/12.0
         monthly_labels_pos=[p*nr_bars/12.0+(0.0416667*nr_bars-0.5) for p in range(0,12)]
         ax.set_xticks(monthly_labels_pos)
@@ -159,24 +134,24 @@ class Evaluator(object):
         return fig, ax
 
     def plot_y_stats(self):
-        norm = self._y.norm()
-        stdev = self._y.stdev_s()
+        norm = self.y.norm()
+        stdev = self.y.stdev_s()
         upper = [norm[i]+stdev[i] for i in range(0,len(stdev))]
         lower = [norm[i]-stdev[i] for i in range(0,len(stdev))]
-        fig, ax = self.prepare_figure()
-        [ax.plot(self._y.data_by_year(year), label='individual years', color='blue', alpha=.2) for year in
-         range(self._y.timeseries.index[0].year, self._y.timeseries.index[-1].year + 1)]
+        fig, ax = self.__prepare_figure()
+        [ax.plot(self.y.data_by_year(year), label='individual years', color='blue', alpha=.2) for year in
+         range(self.y.timeseries.index[0].year, self.y.timeseries.index[-1].year + 1)]
         ax.plot(upper, color='black')
         ax.plot(lower, color='black',label="+/- STDEV")
         ax.plot(norm,label="NORM", color='red')
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles[-3:], labels[-3:])
-        plt.ylabel(self._y.label)
+        plt.ylabel(self.y.label)
         return fig
 
     def plot_P(self):
         P = self.computeP()
-        fig, ax = self.prepare_figure()
+        fig, ax = self.__prepare_figure()
         ax.bar(range(0, len(P)), P, width=0.7, color="black")
         plt.ylabel("P%")
         ax.set_ylim([0, 1])
@@ -184,7 +159,7 @@ class Evaluator(object):
 
     def plot_RelError(self):
         relerror = self.computeRelError()
-        fig, ax = self.prepare_figure()
+        fig, ax = self.__prepare_figure()
         ax.boxplot(relerror)
         ax.plot([0, ax.get_xlim()[1]], [0.674, 0.674], color='red', linestyle='dashed')
         plt.ylabel("Error/STDEV")
@@ -193,7 +168,7 @@ class Evaluator(object):
 
     def plot_trainingdata(self):
         count = self.trainingdata_count()
-        fig, ax = self. prepare_figure()
+        fig, ax = self. __prepare_figure()
         ax.bar(range(0, len(count)), count, width=0.7)
         ax.bar(range(0, len(count)), count, width=0.7)
         plt.ylabel("Number of training data")
@@ -204,24 +179,24 @@ class Evaluator(object):
         fig, ax = plt.subplots(1, 1)
         fig.set_figwidth(8)
         fig.set_figheight(8)
-        ax.scatter(self.y_clean.timeseries,self.forecast.timeseries, marker=".", color='black')
+        ax.scatter(self.y_adj.timeseries, self.forecast.timeseries, marker=".", color='black')
         ax.set_ylabel("predicted")
         ax.set_xlabel("observed")
         maxval = max(ax.get_xlim()[1],ax.get_ylim()[1])
         ax.set_ylim([0,maxval])
         ax.set_xlim([0,maxval])
         ax.plot([0, maxval], [0, maxval],color='green', linestyle='dashed')
-        r_corr = round(corrcoef(self.y_clean.timeseries,self.forecast.timeseries)[0,1],3)
+        r_corr = round(corrcoef(self.y_adj.timeseries, self.forecast.timeseries)[0, 1], 3)
         ax.text(0.5 * maxval, 0.9 * maxval, ("R = %s" % (r_corr)))
         return fig
 
-    def table_summary(self):
+    def __table_summary(self):
         data =dict({
             'Number of training data': self.trainingdata_count(),
-            'Minimum':self._y.min(),
-            'Norm':self._y.norm(),
-            'Maximum':self._y.max(),
-            '+/- d': self._y.stdev_s(),
+            'Minimum':self.y.min(),
+            'Norm':self.y.norm(),
+            'Maximum':self.y.max(),
+            '+/- d': self.y.stdev_s(),
             'P%': self.computeP()
         })
         df=pandas.DataFrame(data)
@@ -243,19 +218,19 @@ class Evaluator(object):
         with open(templatefilepath, 'r') as htmltemplate:
             page=Template(htmltemplate.read())
 
-        encoded1 = self.encode_figure(self.plot_y_stats())
-        encoded2 = self.encode_figure(self.plot_P())
-        encoded3 = self.encode_figure(self.plot_ts_comparison())
-        encoded4 = self.encode_figure(self.plot_RelError())
+        encoded1 = self.__encode_figure(self.plot_y_stats())
+        encoded2 = self.__encode_figure(self.plot_P())
+        encoded3 = self.__encode_figure(self.plot_ts_comparison())
+        encoded4 = self.__encode_figure(self.plot_RelError())
 
-        table = self.table_summary()
+        table = self.__table_summary()
 
         htmlpage = open(filename, 'w')
         htmlpage.write(page.safe_substitute(TABLE=table,IMAGE1=encoded1,IMAGE2=encoded2,IMAGE3=encoded3,IMAGE4=encoded4))
         htmlpage.close()
         return filename
 
-    def encode_figure(self, fig):
+    def __encode_figure(self, fig):
 
         with tempfile.TemporaryFile(suffix=".png") as tmpfile:
             fig.savefig(tmpfile, format="png")
@@ -264,7 +239,7 @@ class Evaluator(object):
             tmpfile.close()
         return encoded
 
-    class InsufficientData(Exception):
+    class __InsufficientData(Exception):
         pass
 
 
@@ -275,21 +250,21 @@ class SeasonalEvaluator(object):
         self.modelEvaluators = modelEvaluators
         self.score = score
 
-    def prepare_figure(self, width=12, height=3):
+    def __prepare_figure(self, width=12, height=3):
         fig, ax = plt.subplots(1, 1)
         fig.set_figwidth(width)
         fig.set_figheight(height)
         return fig, ax
 
-    def table_summary(self):
+    def __table_summary(self):
         index_best = self.score.index(min(self.score))
         index_worst = self.score.index(max(self.score))
         data =dict({
             'Number of training data': int(mean([CV.trainingdata_count()[0] for CV in self.modelEvaluators])),
-            'Minimum':self.modelEvaluators[0]._y.min(),
-            'Norm':self.modelEvaluators[0]._y.norm(),
-            'Maximum':self.modelEvaluators[0]._y.max(),
-            '+/- d': self.modelEvaluators[0]._y.stdev_s(),
+            'Minimum':self.modelEvaluators[0].y.min(),
+            'Norm':self.modelEvaluators[0].y.norm(),
+            'Maximum':self.modelEvaluators[0].y.max(),
+            '+/- d': self.modelEvaluators[0].y.stdev_s(),
             'STDEV/ERROR': mean([mean(CV.computeRelError()) for CV in self.modelEvaluators]),
             'P%': mean([CV.computeP() for CV in self.modelEvaluators])
         })
@@ -297,13 +272,13 @@ class SeasonalEvaluator(object):
         return df.to_html()
 
     def plot_timeseries(self):
-        fig, ax = self.prepare_figure()
+        fig, ax = self.__prepare_figure()
         [ax.plot(CV.forecast.timeseries, color='red', label="individual forecasts", alpha=.2) for CV in self.modelEvaluators]
         df_concat = pandas.concat(([CV.forecast.timeseries for CV in self.modelEvaluators]))
         by_row_index = df_concat.groupby(df_concat.index)
         df_means = by_row_index.mean()
         ax.plot(df_means, color='black', label='mean forecast')
-        ax.plot(self.modelEvaluators[0].y_clean.timeseries, color='green', label='observed')
+        ax.plot(self.modelEvaluators[0].y_adj.timeseries, color='green', label='observed')
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles[-3:], labels[-3:])
         return fig
@@ -324,16 +299,16 @@ class SeasonalEvaluator(object):
         with open(templatefilepath, 'r') as htmltemplate:
             page=Template(htmltemplate.read())
 
-        encoded1=self.encode_figure(self.plot_timeseries())
+        encoded1=self.__encode_figure(self.plot_timeseries())
 
-        table = self.table_summary()
+        table = self.__table_summary()
 
         htmlpage = open(filename, 'w')
         htmlpage.write(page.safe_substitute(TABLE=table, IMAGE1=encoded1))
         htmlpage.close()
         return filename
 
-    def encode_figure(self, fig):
+    def __encode_figure(self, fig):
 
         with tempfile.TemporaryFile(suffix=".png") as tmpfile:
             fig.savefig(tmpfile, format="png")
