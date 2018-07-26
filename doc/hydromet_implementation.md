@@ -3,6 +3,8 @@
 
 ## 1. General Forecast (Monthly, Decadal, 5-day)
 
+ model, y, X, laglength, lag, multimodel, decompose
+ 
 ### Parameter choice by user
 The following parameters should be free to choose by the user within the specified range. 
 
@@ -43,6 +45,8 @@ value=FALSE
 
 
 ## Seasonal Forecasts
+
+forecast_month, model, target, Qm, Pm, Tm, Sm, n_model, max_features, earliest_month
 
 ### Parameter choice by user
 #### _model_
