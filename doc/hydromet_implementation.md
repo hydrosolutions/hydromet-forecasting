@@ -4,7 +4,7 @@
 ## 1. General Forecast (Monthly, Decadal, 5-day)
 
 ### Parameter choice by user
-The following parameters should be free to choose by the user within the specified range. name
+The following parameters should be free to choose by the user within the specified range. 
 
 #### model:
 see section [Regression Model](#regression-model)
