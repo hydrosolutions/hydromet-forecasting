@@ -47,71 +47,78 @@ class Evaluator(object):
             raise self.__InsufficientData("The length of the forecasted timeseries is not sufficient.")
 
 
-    def computeP(self):
+    def computeP(self, annualindex=None):
         """ Returns the P value (Percentage of forecasts with error/stdev > 0.674)
 
             Args:
-                None
+                annualindex (int): default None
 
             Returns:
-                A list of values for each period of the year of the forecasted timeseries. NaN is retuned of the value could not be determined (e.g. not enough data)
+                A list of values for each period of the year of the forecasted timeseries if annualindex is None, else one value.
+                    NaN is retuned of the value could not be determined (e.g. not enough data)
 
             Raises:
                 None
             """
         P = []
-        allowed_error = map(lambda x: x * 0.674, self.y.stdev_s())
-        years = range(min(self.y_adj.timeseries.index).year, max(self.y_adj.timeseries.index).year + 1)
-        for index in range(0, self.y_adj.maxindex):
-            dates = map(self.y_adj.firstday_of_period, years, len(years) * [index + 1])
+        indexrange = range(1, self.y_adj.maxindex+1) if annualindex is None else [annualindex]
+
+        for index in indexrange:
+            allowed_error =  0.674 * self.y.stdev_s(index)
             try:
-                error = abs(self.forecast.timeseries.reindex(dates)[dates] - self.y_adj.timeseries.reindex(dates)[dates])
+                error = abs(self.forecast.data_by_index(index) - self.y_adj.data_by_index(index))
                 error = error.dropna()
-                good = sum(error <= allowed_error[index])
+                good = sum(error <= allowed_error)
                 P.append(float(good) / len(error))
             except:
                 P.append(nan)
         return P
 
-    def computeRelError(self):
+    def computeRelError(self, annualindex=None):
         """ Returns the relative error value of the forecast (error / stdev.sample)
 
                     Args:
                         None
 
                     Returns:
-                        A list of values for each period of the year of the forecasted timeseries. NaN is retuned if the value could not be determined (e.g. not enough data)
+                        A list of values for each period of the year of the forecasted timeseries if annualindex is None, else one value.
+                    NaN is retuned of the value could not be determined (e.g. not enough data)
 
                     Raises:
                         None
                     """
         relerror = []
-        stdev = self.y.stdev_s()
-        years = range(min(self.y_adj.timeseries.index).year, max(self.y_adj.timeseries.index).year + 1)
-        for index in range(0, self.y_adj.maxindex):
-            dates = map(self.y_adj.firstday_of_period, years, len(years) * [index + 1])
+        indexrange = range(1, self.y_adj.maxindex + 1) if annualindex is None else [annualindex]
+
+        for index in indexrange:
+            stdev = self.y.stdev_s(index)
             try:
-                error = abs(self.forecast.timeseries.reindex(dates)[dates] - self.y_adj.timeseries.reindex(dates)[dates])
+                error = abs(self.forecast.data_by_index(index) - self.y_adj.data_by_index(index))
                 error = error.dropna()
-                relerror.append(error.values/stdev[index])
+                relerror.append(mean(error.values/stdev))
             except:
                 relerror.append(nan)
         return relerror
 
-    def trainingdata_count(self):
+    def trainingdata_count(self, annualindex = None):
         """ Returns the number of training data for each period of the year
 
                     Args:
-                        None
+                        annualindex (int): the annualindex for which trainingdata shall be counted. default=None
 
                     Returns:
-                        A list of values for each period of the year of the forecasted timeseries.
+                        A list of values for each period of the year of the forecasted timeseries if annualindex is None, else a single integer
                     Raises:
                         None
                     """
-        count = list()
-        for index in range(1, self.y_adj.maxindex + 1):
-            count.append(len(self.forecast.data_by_index(index)))
+
+        if annualindex is None:
+            count = list()
+            indexrange = range(1, self.y_adj.maxindex + 1)
+            for index in indexrange:
+                count.append(len(self.forecast.data_by_index(index)))
+        else:
+            count = len(self.forecast.data_by_index(annualindex))
         return count
 
     def __prepare_figure(self, width=12, height=3):
