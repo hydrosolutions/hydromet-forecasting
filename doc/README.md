@@ -135,7 +135,6 @@ Talas_S = Talas_S.downsample(mode='m')
 target = Talas_Q.downsample('04-09')
 
 FC_obj = SeasonalForecaster(model=model, target=target, Qm=Talas_Q, Pm=Talas_P, Sm=Talas_S, Tm=Talas_T, forecast_month=4)
-PA_obj.write_html("assessment_report.html")
 
 ```
 

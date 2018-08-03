@@ -363,7 +363,7 @@ class FixedIndexTimeseries(object):
         else:
             return out
 
-    def trend(self):
+    def trend(self, label=None):
         """Returns the trend component of the timeseries
 
             Args:
@@ -375,9 +375,9 @@ class FixedIndexTimeseries(object):
                 None
             """
         dec = decompose(self.timeseries.values, period=self.maxindex)
-        return FixedIndexTimeseries(pandas.Series(dec.trend, index=self.timeseries.index), mode=self.mode)
+        return FixedIndexTimeseries(pandas.Series(dec.trend, index=self.timeseries.index), mode=self.mode, label=self.label if label is None else label)
 
-    def seasonal(self):
+    def seasonal(self, label=None):
         """Returns the seasonal component of the timeseries
 
             Args:
@@ -389,9 +389,9 @@ class FixedIndexTimeseries(object):
                 None
             """
         dec = decompose(self.timeseries.values, period=self.maxindex)
-        return FixedIndexTimeseries(pandas.Series(dec.seasonal, index=self.timeseries.index), mode=self.mode)
+        return FixedIndexTimeseries(pandas.Series(dec.seasonal, index=self.timeseries.index), mode=self.mode, label=self.label if label is None else label)
 
-    def residual(self):
+    def residual(self, label=None):
         """Returns the residual (timeseries without trend and seasonal component) component of the timeseries
 
             Args:
@@ -403,9 +403,9 @@ class FixedIndexTimeseries(object):
                 None
             """
         dec = decompose(self.timeseries.values, period=self.maxindex)
-        return FixedIndexTimeseries(pandas.Series(dec.resid, index=self.timeseries.index), mode=self.mode)
+        return FixedIndexTimeseries(pandas.Series(dec.resid, index=self.timeseries.index), mode=self.mode, label=self.label if label is None else label)
 
-    def detrend(self):
+    def detrend(self, label=None):
         """Returns the timeseries without trend component
 
             Args:
@@ -417,9 +417,9 @@ class FixedIndexTimeseries(object):
                 None
             """
         dec = decompose(self.timeseries.values, period=self.maxindex)
-        return FixedIndexTimeseries(pandas.Series(dec.resid, index=self.timeseries.index)+pandas.Series(dec.seasonal, index=self.timeseries.index), mode=self.mode)
+        return FixedIndexTimeseries(pandas.Series(dec.resid, index=self.timeseries.index)+pandas.Series(dec.seasonal, index=self.timeseries.index), mode=self.mode, label=self.label if label is None else label)
 
-    def derivative(self):
+    def derivative(self, label=None):
         """Returns the derivative of the timeseries
 
             Args:
@@ -433,9 +433,9 @@ class FixedIndexTimeseries(object):
         diff = self.timeseries.diff()
         delta_days = [(x-y).days for x, y in zip(self.timeseries.index, self.timeseries.index[1:])]
         derivative = -diff.drop(diff.index[0])/delta_days
-        return FixedIndexTimeseries(derivative, mode=self.mode)
+        return FixedIndexTimeseries(derivative, mode=self.mode, label=self.label if label is None else label)
 
-    def downsample(self, mode):
+    def downsample(self, mode, label=None):
         """Returns a timeseries with lower frequency than the original
 
             Args:
@@ -455,7 +455,7 @@ class FixedIndexTimeseries(object):
             raise ValueError('The target mode is of same or higher frequency than the source mode. Only downsampling is allowed.')
         else:
             dailyindex = pandas.date_range(self.timeseries.index.values[0], self.timeseries.index.values[-1], freq='D')
-            dailytimeseries = self.timeseries.reindex(dailyindex).interpolate('zero',limit=self.period)
+            dailytimeseries = self.timeseries.reindex(dailyindex).interpolate('zero',limit=self.period+1)
             dummyInstance = FixedIndexTimeseries(pandas.Series(), mode=mode)
             beginyear = self.timeseries.index.values[0].year
             endyear = self.timeseries.index.values[-1].year
@@ -467,9 +467,9 @@ class FixedIndexTimeseries(object):
                     values[i] = dailytimeseries.reindex(pandas.date_range(date,lastday,freq='D')).mean(skipna=False)
                 except:
                     pass
-        return FixedIndexTimeseries(pandas.Series(values,newindex),mode=mode)
+        return FixedIndexTimeseries(pandas.Series(values,newindex),mode=mode, label=self.label if label is None else label)
 
-    def multiply(self, FixedIndexTimeseries_obj):
+    def multiply(self, FixedIndexTimeseries_obj, label=None):
         """Returns the timeseries multiplied by another timeseries
 
             Args:
@@ -484,7 +484,7 @@ class FixedIndexTimeseries(object):
             raise self.__ModeError("Both timeseries must be of the same mode")
 
         res = self.timeseries.multiply(FixedIndexTimeseries_obj.timeseries)
-        return FixedIndexTimeseries(res, mode = self.mode)
+        return FixedIndexTimeseries(res, mode = self.mode, label=self.label if label is None else label)
 
 
     class __ModeError(Exception):

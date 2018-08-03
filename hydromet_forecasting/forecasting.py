@@ -506,7 +506,10 @@ class SeasonalForecaster(object):
                 ValueError: When the value for earliest_month is not within a valid range between last month of target season and forecasting_month
                 ValueError: When the forecast month is not valid resp. within the allowed range of 1..first month of target season-1
                 ValueError: When the values n_model exceed the valid range of 1..100
+                ValueError: When the timeseries of argument target is not of mode seasonal e.g. '04-08'
+                ValueError: When the timeseries of arguments Pm,Qm,Sm,Tm are not of mode monthly
             """
+
         if len(target.mode) < 5:
             raise ValueError("SeasonalForecast is limited to y of mode seasonal.")
 
@@ -535,6 +538,21 @@ class SeasonalForecaster(object):
             self._first_month = earliest_month
         else:
             raise ValueError('The argument earliest_month is not valid.')
+
+        minyear = 0
+        maxyear = 9999
+        for ts in [Sm, Tm, Qm, Pm]:
+            if ts:
+                if ts.mode is not 'm':
+                    raise ValueError("The timeseries Qm, Tm, Sm, Pm must be of monthly mode.")
+                else:
+                    minyear = max(ts.timeseries.index[0].year, minyear)
+                    maxyear = min(ts.timeseries.index[-1].year, maxyear)
+
+        Sm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Sm is not None else None
+        Tm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Tm is not None else None
+        Qm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Qm is not None else None
+        Pm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Pm is not None else None
 
         # Create composite features
         STm = Sm.multiply(Tm) if Sm and Tm else None
