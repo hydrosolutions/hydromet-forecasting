@@ -6,6 +6,8 @@ This modules provides the methods and classes required to forecast discharge or 
 
 Have a look at example.py and the timeseries data in example_data/ to understand the functionality and capability of this module.
 
+More information can be found [here](doc/README.md)
+
 ### Installing
 
 pip install hydromet-forecasting/
