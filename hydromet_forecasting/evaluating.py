@@ -139,7 +139,7 @@ class Evaluator(object):
         upper = [norm[i]+stdev[i] for i in range(0,len(stdev))]
         lower = [norm[i]-stdev[i] for i in range(0,len(stdev))]
         fig, ax = self.__prepare_figure()
-        [ax.plot(self.y.data_by_year(year), label='individual years', color='blue', alpha=.2) for year in
+        [ax.plot(self.y.data_by_year(year).values, label='individual years', color='blue', alpha=.2) for year in
          range(self.y.timeseries.index[0].year, self.y.timeseries.index[-1].year + 1)]
         ax.plot(upper, color='black')
         ax.plot(lower, color='black',label="+/- STDEV")

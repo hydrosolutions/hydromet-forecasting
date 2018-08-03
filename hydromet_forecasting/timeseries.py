@@ -208,7 +208,36 @@ class FixedIndexTimeseries(object):
         else:
             return self.firstday_of_period(date.year, newindex)
 
+    def get_value(self, year, annualindex):
+        """Returns a value by year and annualindex
+
+                    Args:
+                        FixedIndexTimeseriesObj: a FixedIndexTimeseries instance
+                        year (int): the year from which data is requested
+                        annualindex (int): the index from which data is requested
+
+                    Returns:
+                        a pandas Series object with a single value of the same format as the class attribute timeseries
+
+                    Raises:
+                        None
+                    """
+        date = self.firstday_of_period(year, annualindex)
+        return self.timeseries.reindex([date])
+
     def data_by_index(self, annualindex):
+        """Returns all data in FixedIndexTimeseries by annualindex.
+
+                    Args:
+                        FixedIndexTimeseriesObj: a FixedIndexTimeseries instance
+                        annualindex (int): the index from which data is requested
+
+                    Returns:
+                        a pandas Series object of the same format as the class attribute timeseries
+
+                    Raises:
+                        None
+                    """
 
         indexrange = ([annualindex] if type(annualindex) == int else annualindex)
 
@@ -230,16 +259,24 @@ class FixedIndexTimeseries(object):
         return out
 
     def data_by_year(self, year):
+        """Returns all data in FixedIndexTimeseries by year
+
+                    Args:
+                        FixedIndexTimeseriesObj: a FixedIndexTimeseries instance
+                        year (int): the year from which data is requested
+
+                    Returns:
+                        a pandas Series object of the same format as the class attribute timeseries
+                    Raises:
+                        None
+                    """
 
         out = list()
         for i in range(1,self.maxindex+1):
             date = self.firstday_of_period(year=year,annual_index=i)
-            val = self.timeseries.reindex([date]).values[0]
-            if isnan(val):
-                out.append(nan)
-            else:
-                out.append(val)
-        return out
+            val = self.timeseries.reindex([date])
+            out.append(val)
+        return pandas.concat(out)
 
     def norm(self, annualindex=None):
         """Given a FixedIndexTimeseries, returns the average (norm) value for each period of the year or the specified period
@@ -485,7 +522,6 @@ class FixedIndexTimeseries(object):
 
         res = self.timeseries.multiply(FixedIndexTimeseries_obj.timeseries)
         return FixedIndexTimeseries(res, mode = self.mode, label=self.label if label is None else label)
-
 
     class __ModeError(Exception):
         pass
