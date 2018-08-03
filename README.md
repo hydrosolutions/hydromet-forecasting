@@ -9,8 +9,13 @@ Have a look at example.py and the timeseries data in example_data/ to understand
 More information can be found [here](doc/README.md)
 
 ### Installing
-
+```shell
 pip install hydromet-forecasting/
+cd hydromet-forecasting/
+python example.py
+x-www-browser assessment_report.html
+```
+*(tested in Linux Mint 18.1)*
 
 ## Authors
 
