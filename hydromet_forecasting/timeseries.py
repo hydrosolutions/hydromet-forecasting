@@ -44,6 +44,7 @@ class FixedIndexTimeseries(object):
                         series if of higher frequency than indicated by mode.
             """
         self.mode = mode
+        self.yearswitch = False
         if mode == 'd':
             self.maxindex = 36
             self.period = 10
@@ -63,9 +64,9 @@ class FixedIndexTimeseries(object):
         else:
             try:
                 res = mode.split("-")
+                self.yearswitch = False if int(res[1])>int(res[0]) else True #does the season definition overlap new year?
                 self.begin = datetime.date(1,int(res[0]),1)
                 self.end = (datetime.date(1,int(res[1]),1) + datetime.timedelta(32)).replace(day=1) + datetime.timedelta(-1) #Ugly solution to get last day of the month
-                #self.yearswitch = False if int(res[1])>int(res[0]) else True #does the season definition overlap new year?
                 self.maxindex = 1
                 self.period = (self.end - self.begin).days
                 self.periodname = "season"
@@ -170,10 +171,12 @@ class FixedIndexTimeseries(object):
                 None
             """
         if self.maxindex == 1:
-            if self.doy(date) > self.doy(self.end):
-                return 2
-            else:
+            if self.doy(self.begin) <= self.doy(date) <= self.doy(self.end):
                 return 1
+            elif  self.doy(self.begin) <= self.doy(date) or self.doy(date) <= self.doy(self.end):
+                return 1 if self.yearswitch else 2
+            else:
+                return 2
         elif self.maxindex == 365:
             return self.doy(date)
         else:
@@ -499,7 +502,7 @@ class FixedIndexTimeseries(object):
             newindex = [dummyInstance.firstday_of_period(y, i) for y in range(beginyear, endyear+1) for i in range(1, dummyInstance.maxindex+1)]
             values = [nan] * len(newindex)
             for i,date in enumerate(newindex):
-                lastday = dummyInstance.lastday_of_period(date.year,dummyInstance.convert_to_annual_index(date))
+                lastday = dummyInstance.lastday_of_period(date.year+dummyInstance.yearswitch*1,dummyInstance.convert_to_annual_index(date))
                 try:
                     values[i] = dailytimeseries.reindex(pandas.date_range(date,lastday,freq='D')).mean(skipna=False)
                 except:

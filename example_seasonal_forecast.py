@@ -38,7 +38,7 @@ Talas_S = Talas_S.downsample(mode='m')
 # max_features=2 : limits the number of features per model to a maximum of 2
 # n_model=4 : The 4 best models are stored and used for forecasting
 # For demonstration purposes, the arguments here are optimized for a quick grid search. The resulting model performance is thus rather low.
-FC_obj = SeasonalForecaster(model=model, target=Talas_Q.downsample('04-09'), Qm=Talas_Q, Pm=Talas_P, Sm=Talas_S, Tm=Talas_T, forecast_month=4, earliest_month=3, max_features=2, n_model=20)
+FC_obj = SeasonalForecaster(model=model, target=Talas_Q.downsample('10-03'), Qm=Talas_Q, Pm=Talas_P, Sm=Talas_S, Tm=Talas_T, forecast_month=10, earliest_month=None, max_features=2, n_model=20)
 
 # ---------------- STARTING THE GRIDSEARCH & OUTPUT A PERFORMANCE ASSESSMENT ----------------
 def print_progress(i, i_max):  print(str(i) + ' of ' + str(int(i_max)))

@@ -523,21 +523,43 @@ class SeasonalForecaster(object):
 
         self._max_features = max_features
 
-        if  int(target.mode.split('-')[0]) >= forecast_month > 0:
-            self._last_month = forecast_month - 1
-        else:
-            raise ValueError("The argument forecast_month does need to be in between 0 and the first month of the forecasted season")
+        tg_start = int(target.mode.split('-')[0])
+        tg_end = int(target.mode.split('-')[1])
+        target_yearswitch = False if tg_end>=tg_start else True
 
-        self._feature_year_step = True
         if earliest_month is None:
-            self._first_month = int(target.mode.split('-')[1]) + 1
-        elif int(target.mode.split('-')[1]) < earliest_month <= 12:
-            self._first_month = earliest_month
-        elif self._last_month >= earliest_month > 0:
-            self._feature_year_step = False
-            self._first_month = earliest_month
+            self._first_month = tg_end + 1 if tg_end + 1 < 13 else 1
+            self._feature_year_step = False if target_yearswitch else True
         else:
-            raise ValueError('The argument earliest_month is not valid.')
+            self._first_month = earliest_month
+
+        self._last_month = forecast_month - 1 if forecast_month - 1 > 0 else 12
+
+        if target_yearswitch:
+            valid = self._first_month <= self._last_month and \
+                    self._first_month > tg_end and \
+                    self._last_month < tg_start
+            self._feature_year_step = False
+        elif tg_end < self._first_month < 13:
+            if self._first_month <= self._last_month < 13:
+                valid = True
+                self._feature_year_step = True
+            elif self._last_month < tg_start:
+                valid = True
+                self._feature_year_step = True
+            else:
+                valid = False
+        elif 0 < self._first_month < tg_start:
+            if self._first_month <= self._last_month < tg_start:
+                valid = True
+                self._feature_year_step = False
+            else:
+                valid = False
+        else:
+            valid = False
+
+        if not valid:
+            raise ValueError("The combination of earliest_month, forecast_month and target seasonal mode is not valid.")
 
         minyear = 0
         maxyear = 9999
@@ -596,13 +618,13 @@ class SeasonalForecaster(object):
             monthly_timeslices += [str(i).zfill(2) + "-" + str(self._last_month).zfill(2) for i in range(1, self._last_month)]
         else:
             monthly_timeslices = [str(i).zfill(2) + "-" + str(i).zfill(2) for i in range(self._first_month, self._last_month + 1)]
-            monthly_timeslices += [str(self._first_month).zfill(2) + "-" + str(i).zfill(2) for i in range(self._first_month + 1, self._last_month + 1)]
+            monthly_timeslices += [str(i).zfill(2) + "-" + str(self._last_month).zfill(2) for i in range(self._first_month, self._last_month)]
 
         n = len(monthly_timeslices)
         feature_aggregates = []
         feature_aggregates_index = []
         for feature in self._features:
-            feature_aggregates.append([self.__downsample_helper(feature, aggregate) for aggregate in monthly_timeslices])
+            feature_aggregates.append([feature.downsample(mode=aggregate) for aggregate in monthly_timeslices])
             feature_aggregates_index.append([None]+range(0,len(monthly_timeslices)))
 
 
@@ -686,7 +708,7 @@ class SeasonalForecaster(object):
         pred=list()
         for i,FC_obj in enumerate(self.__selectedmodels):
             featureindex = self._selectedfeatures[i]
-            feature_list = [self.__downsample_helper(features[i], x) if x is not None else None for i, x in enumerate(featureindex)]
+            feature_list = [features[i].downsampel(x) if x is not None else None for i, x in enumerate(featureindex)]
             feature_list = filter(None, feature_list)
             try:
                 pred.append(FC_obj.predict(datetime.date(2011,4,1),feature_list))
@@ -694,28 +716,29 @@ class SeasonalForecaster(object):
                 pred.append(nan)
         return(pred)
 
-    @staticmethod
-    def __downsample_helper(timeseries, mode):
-        """ A workaround for FixedIndexTimeseries of mode seasonal that overlap new year e.g. '11-02', which is not natively handled by that class.
-
-            The returned FixedIndexTimeseries has mode '01-x' instead of e.g. '11-x', but the aggegrated data are averaged over the full timewindow.
-                    """
-        res = mode.split("-")
-        if int(res[0]) > int(res[1]):
-            mode1 = res[0]+'-12'
-            weight1 = 13-int(res[0])
-            aggregate1 = timeseries.downsample(mode1)
-            shifted_index = aggregate1.timeseries.index.values + monthdelta(weight1)
-            aggregate1.timeseries.index = shifted_index
-
-            mode2 = '01-'+res[1]
-            weight2 = int(res[1])
-            aggregate2 = timeseries.downsample(mode2)
-
-            timeseries = (aggregate1.timeseries*weight1).add(aggregate2.timeseries*weight2)/(weight1+weight2)
-            return FixedIndexTimeseries(timeseries, mode=mode2, label=mode)
-        else:
-            return timeseries.downsample(mode)
+    # Outdated: FixedIndexTimeseries now supports downsampling for mode seasonal that overlaps new year
+    # @staticmethod
+    # def __downsample_helper(timeseries, mode):
+    #     """ A workaround for FixedIndexTimeseries of mode seasonal that overlap new year e.g. '11-02', which is not natively handled by that class.
+    #
+    #         The returned FixedIndexTimeseries has mode '01-x' instead of e.g. '11-x', but the aggegrated data are averaged over the full timewindow.
+    #                 """
+    #     res = mode.split("-")
+    #     if int(res[0]) > int(res[1]):
+    #         mode1 = res[0]+'-12'
+    #         weight1 = 13-int(res[0])
+    #         aggregate1 = timeseries.downsample(mode1)
+    #         shifted_index = aggregate1.timeseries.index.values + monthdelta(weight1)
+    #         aggregate1.timeseries.index = shifted_index
+    #
+    #         mode2 = '01-'+res[1]
+    #         weight2 = int(res[1])
+    #         aggregate2 = timeseries.downsample(mode2)
+    #
+    #         timeseries = (aggregate1.timeseries*weight1).add(aggregate2.timeseries*weight2)/(weight1+weight2)
+    #         return FixedIndexTimeseries(timeseries, mode=mode2, label=mode)
+    #     else:
+    #         return timeseries.downsample(mode)
 
     class __ModelError(Exception):
         pass
