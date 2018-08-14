@@ -17,6 +17,8 @@ import itertools
 
 import scipy.special as scisp
 
+from timeit import default_timer as timer
+
 class RegressionModel(object):
     """Sets up the Predictor Model from sklearn, etc.
 
@@ -171,7 +173,6 @@ class Forecaster(object):
             self._maxindex = y.maxindex
             self.__model = [clone(self.__model) for i in range(self._maxindex)]
 
-
         self._decompose = decompose
         self._seasonal = [0 for i in range(y.maxindex)]
 
@@ -184,6 +185,10 @@ class Forecaster(object):
             self._X = X
 
         self._X_type = [x.mode for x in self._X]
+
+        for x in self._X:
+            if len(x.timeseries.dropna().index) == 0:
+                raise self.__InsufficientData("the timeseries contains no data")
 
         self._lag = -lag # switches the sign of lag as argument, makes it easier to understand
 
@@ -199,7 +204,8 @@ class Forecaster(object):
         self._y_scaler = [preprocessing.StandardScaler() for i in range(self._maxindex)]
         self._X_scaler = [preprocessing.StandardScaler() for i in range(self._maxindex)]
 
-        assert len(self._X) > 0, "predictor dataset must contain at least one feature"
+        if len(self._X) == 0:
+            raise ValueError("predictor dataset must contain at least one feature")
 
         self.trainingdates = None
         self.evaluator = None
@@ -572,15 +578,15 @@ class SeasonalForecaster(object):
                     maxyear = min(ts.timeseries.index[-1].year, maxyear)
 
         Sm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Sm is not None else None
-        Tm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Tm is not None else None
-        Qm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Qm is not None else None
-        Pm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Pm is not None else None
+        Tm = FixedIndexTimeseries(Tm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Tm.mode, label=Tm.label) if Tm is not None else None
+        Qm = FixedIndexTimeseries(Qm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Qm.mode, label=Qm.label) if Qm is not None else None
+        Pm = FixedIndexTimeseries(Pm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Pm.mode, label=Pm.label) if Pm is not None else None
 
         # Create composite features
-        STm = Sm.multiply(Tm) if Sm and Tm else None
-        SPm = Sm.multiply(Pm) if Sm and Pm else None
-        TPm = Tm.multiply(Pm) if Tm and Pm else None
-        STPm = STm.multiply(Pm) if STm and Pm else None
+        STm = Sm.multiply(Tm, label="ST") if Sm and Tm else None
+        SPm = Sm.multiply(Pm, label="SP") if Sm and Pm else None
+        TPm = Tm.multiply(Pm, label="TP") if Tm and Pm else None
+        STPm = STm.multiply(Pm, label="STP") if STm and Pm else None
 
         self._features = [Qm, Pm, Tm, Sm, STm, SPm, TPm, STPm]
         self.__feature_filter = [i for i in range(0,len(self._features)) if self._features[i]]
@@ -620,47 +626,66 @@ class SeasonalForecaster(object):
             monthly_timeslices = [str(i).zfill(2) + "-" + str(i).zfill(2) for i in range(self._first_month, self._last_month + 1)]
             monthly_timeslices += [str(i).zfill(2) + "-" + str(self._last_month).zfill(2) for i in range(self._first_month, self._last_month)]
 
+        m = len(self._features)
         n = len(monthly_timeslices)
-        feature_aggregates = []
-        feature_aggregates_index = []
-        for feature in self._features:
-            feature_aggregates.append([feature.downsample(mode=aggregate) for aggregate in monthly_timeslices])
-            feature_aggregates_index.append([None]+range(0,len(monthly_timeslices)))
 
 
-        k = len(feature_aggregates)
+        feature_aggregates = [[feature.downsample(aggregate) for aggregate in monthly_timeslices] for feature in self._features]
+        feature_aggregates_index = [[(j, i) for i in range(n)] for j in range(m)]  # tuples: (feature_index,timeslice_index)
+        feature_index = range(0, m)
+
         qmin = len(self._features) - (self._max_features + 1)
-        feature_iterator = itertools.product(*feature_aggregates_index)
-        feature_iterator = itertools.ifilter(lambda x: qmin < x.count(None), feature_iterator)
-        # formula for the number of possible combinations, that was tough brain work *sweating..., -1 to substract (None,None,None,...)
-        max_iterations = int(sum([(n)**(k-q)*scisp.binom(k,k-q) for q in range(qmin+1,k+1)]) - 1)
+
+        c = [None]*self._max_features
+
+        for i in range(0,self._max_features):
+            c[i] = combinations(feature_index, i + 1)
+        feature_iterator = itertools.chain(*c)
+
+        c = list()
+        for item in feature_iterator:
+            vectors = [feature_aggregates_index[i] for i in item]
+            c.append(itertools.product(*vectors))
+        feature_aggregate_iterator = itertools.chain(*c)
+
+        max_iterations = int(sum([(n)**(m-q)*scisp.binom(m,m-q) for q in range(qmin+1,m+1)]) - 1)
 
         i=0
-        score=nan
+        error=nan
         n_model = min(self._n_model, max_iterations)
-        scores = [float('inf')]*n_model
+        errors = [float('inf')]*n_model
         FC_objs = [None]*n_model
         features = [None]*n_model
 
-        for item in feature_iterator:
-
-            feature_list = map(lambda x: feature_aggregates[x][item[x]] if item[x] is not None else None, range(0,len(feature_aggregates)))
-            feature_list = filter(None,feature_list)
+        selected = [0]*max_iterations
+        errored = [0]*max_iterations
+        time = [None]*max_iterations
+        features_record = [None]*max_iterations
+        for item in feature_aggregate_iterator:
+            start = timer()
+            feature_list = [feature_aggregates[index[0]][index[1]] for index in item]
 
             if len(feature_list) > 0:
-                FC_obj = Forecaster(self.__model, self._y, feature_list, lag=0, laglength=[1] * len(feature_list), multimodel=False, decompose=False)
                 try:
+                    FC_obj = Forecaster(self.__model, self._y, feature_list, lag=0, laglength=[1] * len(feature_list),multimodel=False, decompose=False)
                     CV = FC_obj.train_and_evaluate()
-                    score = mean(CV.computeRelError())
-                    if score < max(scores):
-                        index = scores.index(max(scores))
-                        scores[index] = score
+                    error = mean(CV.computeRelError())
+                    if error < max(errors):
+                        selected[i] = 1
+                        index = errors.index(max(errors))
+                        errors[index] = error
                         FC_objs[index] = FC_obj
-                        features[index] = [monthly_timeslices[k] if k is not None else None for k in item]
+                        #features[index] = [monthly_timeslices[k] if k is not None else None for k in item]
                 except:
-                    score = nan
+                    errored[i] = 1
+                    error = nan
+
+                # ...
+                time[i] = timer() - start
+                features_record[i] = item
 
                 i = i + 1
+
                 feedback_function(i,max_iterations)
 
         self.__selectedmodels = FC_objs
@@ -750,5 +775,24 @@ class SeasonalForecaster(object):
     def __no_progress(i, i_max):
         pass
 
+def combinations(iterable, r):
+    # combinations('ABCD', 2) --> AB AC AD BC BD CD
+    # combinations(range(4), 3) --> 012 013 023 123
+    pool = tuple(iterable)
+    n = len(pool)
+    if r > n:
+        return
+    indices = range(r)
+    yield tuple(pool[i] for i in indices)
+    while True:
+        for i in reversed(range(r)):
+            if indices[i] != i + n - r:
+                break
+        else:
+            return
+        indices[i] += 1
+        for j in range(i+1, r):
+            indices[j] = indices[j-1] + 1
+        yield tuple(pool[i] for i in indices)
 
 
