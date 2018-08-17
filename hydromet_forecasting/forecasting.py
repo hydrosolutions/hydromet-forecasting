@@ -313,20 +313,19 @@ class Forecaster(object):
         self.trainingdates = trainingdate_list
 
         for i, item in enumerate(y_list):
-            x_set = self._X_scaler[i].fit_transform(array(X_list[i]))
-            y_set = self._y_scaler[i].fit_transform(array(y_list[i]).reshape(-1,1))
-
-            if len(y_set) > 0:
-                try:
-                    self.__model[i].fit(x_set, y_set.ravel())
-                except Exception as err:
-                    print(
-                        "An error occured while training the model for annual index %s. Please check the training data." % (
-                            i + 1))
-                    raise err
+            if len(item) > 0:
+                x_set = self._X_scaler[i].fit_transform(array(X_list[i]))
+                y_set = self._y_scaler[i].fit_transform(array(y_list[i]).reshape(-1,1))
             else:
-                raise self.__InsufficientData(
-                    "There is not enough data to train the model for the period with annualindex %s" % (i + 1))
+                raise self.__InsufficientData("There is not enough data to train the model for the period with annualindex %s" % (i + 1))
+
+            try:
+                self.__model[i].fit(x_set, y_set.ravel())
+            except Exception as err:
+                print(
+                    "An error occured while training the model for annual index %s. Please check the training data." % (
+                        i + 1))
+                raise err
         self.trained = True
 
     def predict(self, targetdate, X):
@@ -398,18 +397,21 @@ class Forecaster(object):
         if not feedback_function:
             feedback_function = self.__no_progress
 
+        self.train()
+        trainingdate_data = FixedIndexTimeseries(self._y.timeseries.reindex(self.trainingdates), mode=self._y.mode, label=self._y.label)
+
         y = []
 
         # Aggregate data into groups for each annualindex
         if self._multimodel:
             for i in range(0, self._maxindex):
-                y.append(self._y.data_by_index(i + 1))
+                y.append(trainingdate_data.data_by_index(i + 1))
         else:
             y.append(self._y.timeseries)
         # Check if each group has enough samples for the value of k_fold
         groupsize = map(len,y)
         if k_fold=='auto':
-            k_fold=min(groupsize,10)
+            k_fold=min(groupsize+[10])
             if k_fold==1:
                 raise self.__InsufficientData(
                     "There are not enough samples for cross validation. Please provide a larger dataset"
@@ -692,12 +694,15 @@ class SeasonalForecaster(object):
 
                 feedback_function(i,max_iterations)
 
-        self.__selectedmodels = FC_objs
-        self._selectedfeatures = features
-        self.evaluator = SeasonalEvaluator(self._featurenames, features, [model.Evaluator for model in self.__selectedmodels], errors)
-        self.trainingdates = list(set().union(*[model.trainingdates for model in FC_objs]))
-        self.trained = True
-        return self.evaluator
+        if FC_objs.count(None) > 0:
+            raise self.__InsufficientData("There is not enugh data to return the number of requested models.")
+        else:
+            self.__selectedmodels = FC_objs
+            self._selectedfeatures = features
+            self.evaluator = SeasonalEvaluator(self._featurenames, features, [model.Evaluator for model in self.__selectedmodels], errors)
+            self.trainingdates = list(set().union(*[model.trainingdates for model in FC_objs]))
+            self.trained = True
+            return self.evaluator
 
     def predict(self, targetdate, Qm, Pm=None, Tm=None, Sm=None):
         """Does a prediction with the trained model
