@@ -657,12 +657,13 @@ class SeasonalForecaster(object):
         FC_objs = [None]*n_model
         features = [None]*n_model
 
-        selected = [0]*max_iterations
-        errored = [0]*max_iterations
-        time = [None]*max_iterations
+        #selected = [0]*max_iterations
+        #errored = [0]*max_iterations
+        #time = [None]*max_iterations
+        #featurelength = [None] * max_iterations
         features_record = [None]*max_iterations
         for item in feature_aggregate_iterator:
-            start = timer()
+            #start = timer()
             feature_list = [feature_aggregates[index[0]][index[1]] for index in item]
 
             if len(feature_list) > 0:
@@ -671,18 +672,21 @@ class SeasonalForecaster(object):
                     CV = FC_obj.train_and_evaluate()
                     error = mean(CV.computeRelError())
                     if error < max(errors):
-                        selected[i] = 1
+                        #selected[i] = 1
                         index = errors.index(max(errors))
                         errors[index] = error
                         FC_objs[index] = FC_obj
-                        #features[index] = [monthly_timeslices[k] if k is not None else None for k in item]
+                        features[index] = [None] * len(self._features)
+                        for k in item:
+                            features[index][k[0]] = monthly_timeslices[k[1]]
                 except:
-                    errored[i] = 1
+                    #errored[i] = 1
                     error = nan
 
                 # ...
-                time[i] = timer() - start
-                features_record[i] = item
+                #time[i] = timer() - start
+                #features_record[i] = item
+                #featurelength[i] = len(feature_list)
 
                 i = i + 1
 
@@ -690,7 +694,7 @@ class SeasonalForecaster(object):
 
         self.__selectedmodels = FC_objs
         self._selectedfeatures = features
-        self.evaluator = SeasonalEvaluator(self._featurenames, features, [model.Evaluator for model in self.__selectedmodels], scores)
+        self.evaluator = SeasonalEvaluator(self._featurenames, features, [model.Evaluator for model in self.__selectedmodels], errors)
         self.trainingdates = list(set().union(*[model.trainingdates for model in FC_objs]))
         self.trained = True
         return self.evaluator
@@ -733,10 +737,10 @@ class SeasonalForecaster(object):
         pred=list()
         for i,FC_obj in enumerate(self.__selectedmodels):
             featureindex = self._selectedfeatures[i]
-            feature_list = [features[i].downsampel(x) if x is not None else None for i, x in enumerate(featureindex)]
+            feature_list = [features[i].downsample(x) if x is not None else None for i, x in enumerate(featureindex)]
             feature_list = filter(None, feature_list)
             try:
-                pred.append(FC_obj.predict(datetime.date(2011,4,1),feature_list))
+                pred.append(FC_obj.predict(targetdate,feature_list))
             except:
                 pred.append(nan)
         return(pred)
