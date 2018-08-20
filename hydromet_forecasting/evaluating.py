@@ -251,11 +251,11 @@ class Evaluator(object):
 
 
 class SeasonalEvaluator(object):
-    def __init__(self, featurenames,selectedfeatures,modelEvaluators, score):
+    def __init__(self, featurenames,selectedfeatures,modelEvaluators):
         self.featurenames = featurenames
         self.selectedfeatures = selectedfeatures
         self.modelEvaluators = modelEvaluators
-        self.score = score
+        self.score = [mean(CV.computeRelError()) for CV in self.modelEvaluators]
 
     def __prepare_figure(self, width=12, height=3):
         fig, ax = plt.subplots(1, 1)

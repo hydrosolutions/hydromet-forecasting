@@ -474,7 +474,6 @@ class Forecaster(object):
     class __ModelError(Exception):
         pass
 
-
 class SeasonalForecaster(object):
     """Forecasting class for Seasonal Discharge, developed on the basis of the Paper
     <Statistical forecast of seasonal discharge in Central Asia using observational records: development of a generic linear modelling tool for operational water resource management.>
@@ -524,10 +523,7 @@ class SeasonalForecaster(object):
         self.__model = model
         self._y = target
 
-        if 0 < n_model < 101:
-            self._n_model = n_model
-        else:
-            raise ValueError("n_model must be in the range 1...100")
+        self._n_model = n_model
 
         self._max_features = max_features
 
@@ -699,7 +695,7 @@ class SeasonalForecaster(object):
         else:
             self.__selectedmodels = FC_objs
             self._selectedfeatures = features
-            self.evaluator = SeasonalEvaluator(self._featurenames, features, [model.Evaluator for model in self.__selectedmodels], errors)
+            self.evaluator = SeasonalEvaluator(self._featurenames, features, [model.Evaluator for model in self.__selectedmodels])
             self.trainingdates = list(set().union(*[model.trainingdates for model in FC_objs]))
             self.trained = True
             return self.evaluator
@@ -735,9 +731,8 @@ class SeasonalForecaster(object):
 
         features = [Qm, Pm, Tm, Sm, STm, SPm, TPm, STPm]
         features = [features[i] for i in self.__feature_filter]
-        for i, feature in enumerate(features):
-            if self._features[i] is not None and feature is None:
-                raise self.__InsufficientData("The feature " + self._featurenames[i] + " was not found in arguments")
+        if features.count(None) > 0:
+            raise self.__InsufficientData("One of the required feature datasets is missing")
 
         pred=list()
         for i,FC_obj in enumerate(self.__selectedmodels):
@@ -750,29 +745,69 @@ class SeasonalForecaster(object):
                 pred.append(nan)
         return(pred)
 
-    # Outdated: FixedIndexTimeseries now supports downsampling for mode seasonal that overlaps new year
-    # @staticmethod
-    # def __downsample_helper(timeseries, mode):
-    #     """ A workaround for FixedIndexTimeseries of mode seasonal that overlap new year e.g. '11-02', which is not natively handled by that class.
-    #
-    #         The returned FixedIndexTimeseries has mode '01-x' instead of e.g. '11-x', but the aggegrated data are averaged over the full timewindow.
-    #                 """
-    #     res = mode.split("-")
-    #     if int(res[0]) > int(res[1]):
-    #         mode1 = res[0]+'-12'
-    #         weight1 = 13-int(res[0])
-    #         aggregate1 = timeseries.downsample(mode1)
-    #         shifted_index = aggregate1.timeseries.index.values + monthdelta(weight1)
-    #         aggregate1.timeseries.index = shifted_index
-    #
-    #         mode2 = '01-'+res[1]
-    #         weight2 = int(res[1])
-    #         aggregate2 = timeseries.downsample(mode2)
-    #
-    #         timeseries = (aggregate1.timeseries*weight1).add(aggregate2.timeseries*weight2)/(weight1+weight2)
-    #         return FixedIndexTimeseries(timeseries, mode=mode2, label=mode)
-    #     else:
-    #         return timeseries.downsample(mode)
+    def update(self, target, Qm, Pm=None, Tm=None, Sm=None):
+
+        if not target.mode == self._y.mode:
+            raise ValueError("The updated target data timeseries is of different mode than the original dataset")
+
+        minyear = 0
+        maxyear = 9999
+        for ts in [Sm, Tm, Qm, Pm]:
+            if ts:
+                if ts.mode is not 'm':
+                    raise ValueError("The timeseries Qm, Tm, Sm, Pm must be of monthly mode.")
+                else:
+                    minyear = max(ts.timeseries.index[0].year, minyear)
+                    maxyear = min(ts.timeseries.index[-1].year, maxyear)
+
+        Sm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],
+                                  mode=Sm.mode, label=Sm.label) if Sm is not None else None
+        Tm = FixedIndexTimeseries(Tm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],
+                                  mode=Tm.mode, label=Tm.label) if Tm is not None else None
+        Qm = FixedIndexTimeseries(Qm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],
+                                  mode=Qm.mode, label=Qm.label) if Qm is not None else None
+        Pm = FixedIndexTimeseries(Pm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],
+                                  mode=Pm.mode, label=Pm.label) if Pm is not None else None
+        # Create composite features
+        STm = Sm.multiply(Tm, label="ST") if Sm and Tm else None
+        SPm = Sm.multiply(Pm, label="SP") if Sm and Pm else None
+        TPm = Tm.multiply(Pm, label="TP") if Tm and Pm else None
+        STPm = STm.multiply(Pm, label="STP") if STm and Pm else None
+
+        features = [Qm, Pm, Tm, Sm, STm, SPm, TPm, STPm]
+        features = [features[i] for i in self.__feature_filter]
+        if features.count(None) > 0:
+            raise self.__InsufficientData("One of the required feature datasets is missing")
+        else:
+            self._y = target
+            self._features = features
+
+        return self.retrain()
+
+    def retrain(self):
+
+        if not self.trained:
+            raise self.__ModelError("The model has not been trained yet.")
+
+        FC_objs = [None]*len(self.__selectedmodels)
+        for i in range(len(self.__selectedmodels)):
+            featureindex = self._selectedfeatures[i]
+            feature_list = [self._features[k].downsample(x) if x is not None else None for k, x in enumerate(featureindex)]
+            feature_list = filter(None, feature_list)
+            try:
+                FC_objs[i] = Forecaster(self.__model, self._y, feature_list, lag=0, laglength=[1] * len(feature_list),
+                                    multimodel=False, decompose=False)
+                FC_objs[i].train_and_evaluate()
+            except:
+                raise self.__ModelError("There was an Error training the model.")
+
+        self.__selectedmodels = FC_objs
+        self.evaluator = SeasonalEvaluator(self._featurenames, self._selectedfeatures,
+                                           [model.Evaluator for model in self.__selectedmodels])
+        self.trainingdates = list(set().union(*[model.trainingdates for model in FC_objs]))
+        self.trained = True
+
+        return self.evaluator
 
     class __ModelError(Exception):
         pass
