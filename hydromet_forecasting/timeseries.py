@@ -64,7 +64,7 @@ class FixedIndexTimeseries(object):
         else:
             try:
                 res = mode.split("-")
-                self.yearswitch = False if int(res[1])>int(res[0]) else True #does the season definition overlap new year?
+                self.yearswitch = False if int(res[1])>=int(res[0]) else True #does the season definition overlap new year?
                 self.begin = datetime.date(1,int(res[0]),1)
                 self.end = (datetime.date(1,int(res[1]),1) + datetime.timedelta(32)).replace(day=1) + datetime.timedelta(-1) #Ugly solution to get last day of the month
                 self.maxindex = 1
