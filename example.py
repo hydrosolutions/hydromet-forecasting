@@ -23,9 +23,9 @@ model=reg_model.configure()  #{'n_estimators':20}
 # ---------------- LOADING TIMESERIES DATA FROM A FILE ----------------
 # modes: "m","d","p","dl" --> monthly, decadal, pentadal, daily
 
-discharge=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/Q.csv",mode="d", label="D").downsample('11-03')
-precipitation=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/P.csv",mode="d", label="P").downsample('m')
-temperature=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa_short/T.csv",mode="d", label="T").downsample('m')
+discharge=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/Q.csv",mode="d", label="D")
+precipitation=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/P.csv",mode="d", label="P")
+temperature=FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/T.csv",mode="d", label="T")
 
 # ---------------- INITIALISING THE  FORECASTING OBJECT ----------------
 

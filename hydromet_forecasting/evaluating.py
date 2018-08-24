@@ -230,10 +230,10 @@ class Evaluator(object):
         encoded3 = self.__encode_figure(self.plot_ts_comparison())
         encoded4 = self.__encode_figure(self.plot_RelError())
 
-        table = self.__table_summary()
+        table1 = self.__table_summary()
 
         htmlpage = open(filename, 'w')
-        htmlpage.write(page.safe_substitute(TABLE=table,IMAGE1=encoded1,IMAGE2=encoded2,IMAGE3=encoded3,IMAGE4=encoded4))
+        htmlpage.write(page.safe_substitute(TABLE1=table1,IMAGE1=encoded1,IMAGE2=encoded2,IMAGE3=encoded3,IMAGE4=encoded4))
         htmlpage.close()
         return filename
 
