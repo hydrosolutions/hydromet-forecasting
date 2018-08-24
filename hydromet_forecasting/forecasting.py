@@ -425,8 +425,8 @@ class Forecaster(object):
                 "There are not enough samples for cross validation with k_fold=%s. Please choose a lower value." %k_fold
             )
         # Split each group with KFold into training and test sets
-        maxsteps = k_fold+2
-        t=0
+        maxsteps = k_fold+3
+        t=1
         feedback_function(t,maxsteps)
         train = [pandas.Series()] * k_fold
         test = [pandas.Series()] * k_fold
