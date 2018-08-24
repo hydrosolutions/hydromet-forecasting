@@ -17,6 +17,8 @@ import itertools
 
 import scipy.special as scisp
 
+from timeit import default_timer as timer
+
 class RegressionModel(object):
     """Sets up the Predictor Model from sklearn, etc.
 
@@ -171,7 +173,6 @@ class Forecaster(object):
             self._maxindex = y.maxindex
             self.__model = [clone(self.__model) for i in range(self._maxindex)]
 
-
         self._decompose = decompose
         self._seasonal = [0 for i in range(y.maxindex)]
 
@@ -184,6 +185,10 @@ class Forecaster(object):
             self._X = X
 
         self._X_type = [x.mode for x in self._X]
+
+        for x in self._X:
+            if len(x.timeseries.dropna().index) == 0:
+                raise self.__InsufficientData("the timeseries contains no data")
 
         self._lag = -lag # switches the sign of lag as argument, makes it easier to understand
 
@@ -199,7 +204,8 @@ class Forecaster(object):
         self._y_scaler = [preprocessing.StandardScaler() for i in range(self._maxindex)]
         self._X_scaler = [preprocessing.StandardScaler() for i in range(self._maxindex)]
 
-        assert len(self._X) > 0, "predictor dataset must contain at least one feature"
+        if len(self._X) == 0:
+            raise ValueError("predictor dataset must contain at least one feature")
 
         self.trainingdates = None
         self.evaluator = None
@@ -307,20 +313,19 @@ class Forecaster(object):
         self.trainingdates = trainingdate_list
 
         for i, item in enumerate(y_list):
-            x_set = self._X_scaler[i].fit_transform(array(X_list[i]))
-            y_set = self._y_scaler[i].fit_transform(array(y_list[i]).reshape(-1,1))
-
-            if len(y_set) > 0:
-                try:
-                    self.__model[i].fit(x_set, y_set.ravel())
-                except Exception as err:
-                    print(
-                        "An error occured while training the model for annual index %s. Please check the training data." % (
-                            i + 1))
-                    raise err
+            if len(item) > 0:
+                x_set = self._X_scaler[i].fit_transform(array(X_list[i]))
+                y_set = self._y_scaler[i].fit_transform(array(y_list[i]).reshape(-1,1))
             else:
-                raise self.__InsufficientData(
-                    "There is not enough data to train the model for the period with annualindex %s" % (i + 1))
+                raise self.__InsufficientData("There is not enough data to train the model for the period with annualindex %s" % (i + 1))
+
+            try:
+                self.__model[i].fit(x_set, y_set.ravel())
+            except Exception as err:
+                print(
+                    "An error occured while training the model for annual index %s. Please check the training data." % (
+                        i + 1))
+                raise err
         self.trained = True
 
     def predict(self, targetdate, X):
@@ -392,18 +397,21 @@ class Forecaster(object):
         if not feedback_function:
             feedback_function = self.__no_progress
 
+        self.train()
+        trainingdate_data = FixedIndexTimeseries(self._y.timeseries.reindex(self.trainingdates), mode=self._y.mode, label=self._y.label)
+
         y = []
 
         # Aggregate data into groups for each annualindex
         if self._multimodel:
             for i in range(0, self._maxindex):
-                y.append(self._y.data_by_index(i + 1))
+                y.append(trainingdate_data.data_by_index(i + 1))
         else:
             y.append(self._y.timeseries)
         # Check if each group has enough samples for the value of k_fold
         groupsize = map(len,y)
         if k_fold=='auto':
-            k_fold=min(groupsize,10)
+            k_fold=min(groupsize+[10])
             if k_fold==1:
                 raise self.__InsufficientData(
                     "There are not enough samples for cross validation. Please provide a larger dataset"
@@ -417,8 +425,8 @@ class Forecaster(object):
                 "There are not enough samples for cross validation with k_fold=%s. Please choose a lower value." %k_fold
             )
         # Split each group with KFold into training and test sets
-        maxsteps = k_fold+2
-        t=0
+        maxsteps = k_fold+3
+        t=1
         feedback_function(t,maxsteps)
         train = [pandas.Series()] * k_fold
         test = [pandas.Series()] * k_fold
@@ -465,7 +473,6 @@ class Forecaster(object):
 
     class __ModelError(Exception):
         pass
-
 
 class SeasonalForecaster(object):
     """Forecasting class for Seasonal Discharge, developed on the basis of the Paper
@@ -516,28 +523,47 @@ class SeasonalForecaster(object):
         self.__model = model
         self._y = target
 
-        if 0 < n_model < 101:
-            self._n_model = n_model
-        else:
-            raise ValueError("n_model must be in the range 1...100")
+        self._n_model = n_model
 
         self._max_features = max_features
 
-        if  int(target.mode.split('-')[0]) >= forecast_month > 0:
-            self._last_month = forecast_month - 1
-        else:
-            raise ValueError("The argument forecast_month does need to be in between 0 and the first month of the forecasted season")
+        tg_start = int(target.mode.split('-')[0])
+        tg_end = int(target.mode.split('-')[1])
+        target_yearswitch = False if tg_end>=tg_start else True
 
-        self._feature_year_step = True
         if earliest_month is None:
-            self._first_month = int(target.mode.split('-')[1]) + 1
-        elif int(target.mode.split('-')[1]) < earliest_month <= 12:
-            self._first_month = earliest_month
-        elif self._last_month >= earliest_month > 0:
-            self._feature_year_step = False
-            self._first_month = earliest_month
+            self._first_month = tg_end + 1 if tg_end + 1 < 13 else 1
+            self._feature_year_step = False if target_yearswitch else True
         else:
-            raise ValueError('The argument earliest_month is not valid.')
+            self._first_month = earliest_month
+
+        self._last_month = forecast_month - 1 if forecast_month - 1 > 0 else 12
+
+        if target_yearswitch:
+            valid = self._first_month <= self._last_month and \
+                    self._first_month > tg_end and \
+                    self._last_month < tg_start
+            self._feature_year_step = False
+        elif tg_end < self._first_month < 13:
+            if self._first_month <= self._last_month < 13:
+                valid = True
+                self._feature_year_step = True
+            elif self._last_month < tg_start:
+                valid = True
+                self._feature_year_step = True
+            else:
+                valid = False
+        elif 0 < self._first_month < tg_start:
+            if self._first_month <= self._last_month < tg_start:
+                valid = True
+                self._feature_year_step = False
+            else:
+                valid = False
+        else:
+            valid = False
+
+        if not valid:
+            raise ValueError("The combination of earliest_month, forecast_month and target seasonal mode is not valid.")
 
         minyear = 0
         maxyear = 9999
@@ -550,20 +576,20 @@ class SeasonalForecaster(object):
                     maxyear = min(ts.timeseries.index[-1].year, maxyear)
 
         Sm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Sm is not None else None
-        Tm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Tm is not None else None
-        Qm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Qm is not None else None
-        Pm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Sm.mode, label=Sm.label) if Pm is not None else None
+        Tm = FixedIndexTimeseries(Tm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Tm.mode, label=Tm.label) if Tm is not None else None
+        Qm = FixedIndexTimeseries(Qm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Qm.mode, label=Qm.label) if Qm is not None else None
+        Pm = FixedIndexTimeseries(Pm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],mode=Pm.mode, label=Pm.label) if Pm is not None else None
 
         # Create composite features
-        STm = Sm.multiply(Tm) if Sm and Tm else None
-        SPm = Sm.multiply(Pm) if Sm and Pm else None
-        TPm = Tm.multiply(Pm) if Tm and Pm else None
-        STPm = STm.multiply(Pm) if STm and Pm else None
+        STm = Sm.multiply(Tm, label="ST") if Sm and Tm else None
+        SPm = Sm.multiply(Pm, label="SP") if Sm and Pm else None
+        TPm = Tm.multiply(Pm, label="TP") if Tm and Pm else None
+        STPm = STm.multiply(Pm, label="STP") if STm and Pm else None
 
         self._features = [Qm, Pm, Tm, Sm, STm, SPm, TPm, STPm]
         self.__feature_filter = [i for i in range(0,len(self._features)) if self._features[i]]
         self._features = [self._features[i] for i in self.__feature_filter]
-        featurenames = ["Qm", "Pm", "Tm", "Sm", "STm", "SPm", "TPm", "STPm"]
+        featurenames = ["Y_Discharge", "Y_Precipiation", "Y_Temperature", "Y_Snow", "Y_Snow*Temp", "Y_Snow*Precip", "Y_Temp*Precip", "Y_Snow*Precip*Temp"]
         self._featurenames = [featurenames[i] for i in self.__feature_filter]
 
         self.__selectedmodels = None
@@ -596,57 +622,83 @@ class SeasonalForecaster(object):
             monthly_timeslices += [str(i).zfill(2) + "-" + str(self._last_month).zfill(2) for i in range(1, self._last_month)]
         else:
             monthly_timeslices = [str(i).zfill(2) + "-" + str(i).zfill(2) for i in range(self._first_month, self._last_month + 1)]
-            monthly_timeslices += [str(self._first_month).zfill(2) + "-" + str(i).zfill(2) for i in range(self._first_month + 1, self._last_month + 1)]
+            monthly_timeslices += [str(i).zfill(2) + "-" + str(self._last_month).zfill(2) for i in range(self._first_month, self._last_month)]
 
+        m = len(self._features)
         n = len(monthly_timeslices)
-        feature_aggregates = []
-        feature_aggregates_index = []
-        for feature in self._features:
-            feature_aggregates.append([self.__downsample_helper(feature, aggregate) for aggregate in monthly_timeslices])
-            feature_aggregates_index.append([None]+range(0,len(monthly_timeslices)))
 
 
-        k = len(feature_aggregates)
+        feature_aggregates = [[feature.downsample(aggregate) for aggregate in monthly_timeslices] for feature in self._features]
+        feature_aggregates_index = [[(j, i) for i in range(n)] for j in range(m)]  # tuples: (feature_index,timeslice_index)
+        feature_index = range(0, m)
+
         qmin = len(self._features) - (self._max_features + 1)
-        feature_iterator = itertools.product(*feature_aggregates_index)
-        feature_iterator = itertools.ifilter(lambda x: qmin < x.count(None), feature_iterator)
-        # formula for the number of possible combinations, that was tough brain work *sweating..., -1 to substract (None,None,None,...)
-        max_iterations = int(sum([(n)**(k-q)*scisp.binom(k,k-q) for q in range(qmin+1,k+1)]) - 1)
+
+        c = [None]*self._max_features
+
+        for i in range(0,self._max_features):
+            c[i] = combinations(feature_index, i + 1)
+        feature_iterator = itertools.chain(*c)
+
+        c = list()
+        for item in feature_iterator:
+            vectors = [feature_aggregates_index[i] for i in item]
+            c.append(itertools.product(*vectors))
+        feature_aggregate_iterator = itertools.chain(*c)
+
+        max_iterations = int(sum([(n)**(m-q)*scisp.binom(m,m-q) for q in range(qmin+1,m+1)]) - 1)
 
         i=0
-        score=nan
+        error=nan
         n_model = min(self._n_model, max_iterations)
-        scores = [float('inf')]*n_model
+        errors = [float('inf')]*n_model
         FC_objs = [None]*n_model
         features = [None]*n_model
 
-        for item in feature_iterator:
-
-            feature_list = map(lambda x: feature_aggregates[x][item[x]] if item[x] is not None else None, range(0,len(feature_aggregates)))
-            feature_list = filter(None,feature_list)
+        #selected = [0]*max_iterations
+        #errored = [0]*max_iterations
+        #time = [None]*max_iterations
+        #featurelength = [None] * max_iterations
+        features_record = [None]*max_iterations
+        for item in feature_aggregate_iterator:
+            #start = timer()
+            feature_list = [feature_aggregates[index[0]][index[1]] for index in item]
 
             if len(feature_list) > 0:
-                FC_obj = Forecaster(self.__model, self._y, feature_list, lag=0, laglength=[1] * len(feature_list), multimodel=False, decompose=False)
                 try:
+                    FC_obj = Forecaster(self.__model, self._y, feature_list, lag=0, laglength=[1] * len(feature_list),multimodel=False, decompose=False)
                     CV = FC_obj.train_and_evaluate()
-                    score = mean(CV.computeRelError())
-                    if score < max(scores):
-                        index = scores.index(max(scores))
-                        scores[index] = score
+                    error = mean(CV.computeRelError())
+                    if error < max(errors):
+                        #selected[i] = 1
+                        index = errors.index(max(errors))
+                        errors[index] = error
                         FC_objs[index] = FC_obj
-                        features[index] = [monthly_timeslices[k] if k is not None else None for k in item]
+                        features[index] = [None] * len(self._features)
+                        for k in item:
+                            features[index][k[0]] = monthly_timeslices[k[1]]
                 except:
-                    score = nan
+                    #errored[i] = 1
+                    error = nan
+
+                # ...
+                #time[i] = timer() - start
+                #features_record[i] = item
+                #featurelength[i] = len(feature_list)
 
                 i = i + 1
+
                 feedback_function(i,max_iterations)
 
-        self.__selectedmodels = FC_objs
-        self._selectedfeatures = features
-        self.evaluator = SeasonalEvaluator(self._featurenames, features, [model.Evaluator for model in self.__selectedmodels], scores)
-        self.trainingdates = list(set().union(*[model.trainingdates for model in FC_objs]))
-        self.trained = True
-        return self.evaluator
+        if FC_objs.count(None) > 0:
+            raise self.__InsufficientData("There is not enugh data to return the number of requested models.")
+        else:
+            self.__selectedmodels = FC_objs
+            self._selectedfeatures = features
+            self.evaluator = SeasonalEvaluator(self._featurenames, features, [model.Evaluator for model in self.__selectedmodels])
+            self.trainingdates = list(set().union(*[model.trainingdates for model in FC_objs]))
+            self.trained = True
+            return self.evaluator
 
     def predict(self, targetdate, Qm, Pm=None, Tm=None, Sm=None):
         """Does a prediction with the trained model
@@ -679,43 +731,83 @@ class SeasonalForecaster(object):
 
         features = [Qm, Pm, Tm, Sm, STm, SPm, TPm, STPm]
         features = [features[i] for i in self.__feature_filter]
-        for i, feature in enumerate(features):
-            if self._features[i] is not None and feature is None:
-                raise self.__InsufficientData("The feature " + self._featurenames[i] + " was not found in arguments")
+        if features.count(None) > 0:
+            raise self.__InsufficientData("One of the required feature datasets is missing")
 
         pred=list()
         for i,FC_obj in enumerate(self.__selectedmodels):
             featureindex = self._selectedfeatures[i]
-            feature_list = [self.__downsample_helper(features[i], x) if x is not None else None for i, x in enumerate(featureindex)]
+            feature_list = [features[i].downsample(x) if x is not None else None for i, x in enumerate(featureindex)]
             feature_list = filter(None, feature_list)
             try:
-                pred.append(FC_obj.predict(datetime.date(2011,4,1),feature_list))
+                pred.append(FC_obj.predict(targetdate,feature_list))
             except:
                 pred.append(nan)
         return(pred)
 
-    @staticmethod
-    def __downsample_helper(timeseries, mode):
-        """ A workaround for FixedIndexTimeseries of mode seasonal that overlap new year e.g. '11-02', which is not natively handled by that class.
+    def update(self, target, Qm, Pm=None, Tm=None, Sm=None):
 
-            The returned FixedIndexTimeseries has mode '01-x' instead of e.g. '11-x', but the aggegrated data are averaged over the full timewindow.
-                    """
-        res = mode.split("-")
-        if int(res[0]) > int(res[1]):
-            mode1 = res[0]+'-12'
-            weight1 = 13-int(res[0])
-            aggregate1 = timeseries.downsample(mode1)
-            shifted_index = aggregate1.timeseries.index.values + monthdelta(weight1)
-            aggregate1.timeseries.index = shifted_index
+        if not target.mode == self._y.mode:
+            raise ValueError("The updated target data timeseries is of different mode than the original dataset")
 
-            mode2 = '01-'+res[1]
-            weight2 = int(res[1])
-            aggregate2 = timeseries.downsample(mode2)
+        minyear = 0
+        maxyear = 9999
+        for ts in [Sm, Tm, Qm, Pm]:
+            if ts:
+                if ts.mode is not 'm':
+                    raise ValueError("The timeseries Qm, Tm, Sm, Pm must be of monthly mode.")
+                else:
+                    minyear = max(ts.timeseries.index[0].year, minyear)
+                    maxyear = min(ts.timeseries.index[-1].year, maxyear)
 
-            timeseries = (aggregate1.timeseries*weight1).add(aggregate2.timeseries*weight2)/(weight1+weight2)
-            return FixedIndexTimeseries(timeseries, mode=mode2, label=mode)
+        Sm = FixedIndexTimeseries(Sm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],
+                                  mode=Sm.mode, label=Sm.label) if Sm is not None else None
+        Tm = FixedIndexTimeseries(Tm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],
+                                  mode=Tm.mode, label=Tm.label) if Tm is not None else None
+        Qm = FixedIndexTimeseries(Qm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],
+                                  mode=Qm.mode, label=Qm.label) if Qm is not None else None
+        Pm = FixedIndexTimeseries(Pm.timeseries[datetime.date(minyear, 1, 1):datetime.date(maxyear, 12, 31)],
+                                  mode=Pm.mode, label=Pm.label) if Pm is not None else None
+        # Create composite features
+        STm = Sm.multiply(Tm, label="ST") if Sm and Tm else None
+        SPm = Sm.multiply(Pm, label="SP") if Sm and Pm else None
+        TPm = Tm.multiply(Pm, label="TP") if Tm and Pm else None
+        STPm = STm.multiply(Pm, label="STP") if STm and Pm else None
+
+        features = [Qm, Pm, Tm, Sm, STm, SPm, TPm, STPm]
+        features = [features[i] for i in self.__feature_filter]
+        if features.count(None) > 0:
+            raise self.__InsufficientData("One of the required feature datasets is missing")
         else:
-            return timeseries.downsample(mode)
+            self._y = target
+            self._features = features
+
+        return self.retrain()
+
+    def retrain(self):
+
+        if not self.trained:
+            raise self.__ModelError("The model has not been trained yet.")
+
+        FC_objs = [None]*len(self.__selectedmodels)
+        for i in range(len(self.__selectedmodels)):
+            featureindex = self._selectedfeatures[i]
+            feature_list = [self._features[k].downsample(x) if x is not None else None for k, x in enumerate(featureindex)]
+            feature_list = filter(None, feature_list)
+            try:
+                FC_objs[i] = Forecaster(self.__model, self._y, feature_list, lag=0, laglength=[1] * len(feature_list),
+                                    multimodel=False, decompose=False)
+                FC_objs[i].train_and_evaluate()
+            except:
+                raise self.__ModelError("There was an Error training the model.")
+
+        self.__selectedmodels = FC_objs
+        self.evaluator = SeasonalEvaluator(self._featurenames, self._selectedfeatures,
+                                           [model.Evaluator for model in self.__selectedmodels])
+        self.trainingdates = list(set().union(*[model.trainingdates for model in FC_objs]))
+        self.trained = True
+
+        return self.evaluator
 
     class __ModelError(Exception):
         pass
@@ -727,5 +819,24 @@ class SeasonalForecaster(object):
     def __no_progress(i, i_max):
         pass
 
+def combinations(iterable, r):
+    # combinations('ABCD', 2) --> AB AC AD BC BD CD
+    # combinations(range(4), 3) --> 012 013 023 123
+    pool = tuple(iterable)
+    n = len(pool)
+    if r > n:
+        return
+    indices = range(r)
+    yield tuple(pool[i] for i in indices)
+    while True:
+        for i in reversed(range(r)):
+            if indices[i] != i + n - r:
+                break
+        else:
+            return
+        indices[i] += 1
+        for j in range(i+1, r):
+            indices[j] = indices[j-1] + 1
+        yield tuple(pool[i] for i in indices)
 
 

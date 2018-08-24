@@ -251,11 +251,11 @@ class Evaluator(object):
 
 
 class SeasonalEvaluator(object):
-    def __init__(self, featurenames,selectedfeatures,modelEvaluators, score):
+    def __init__(self, featurenames,selectedfeatures,modelEvaluators):
         self.featurenames = featurenames
         self.selectedfeatures = selectedfeatures
         self.modelEvaluators = modelEvaluators
-        self.score = score
+        self.score = [mean(CV.computeRelError()) for CV in self.modelEvaluators]
 
     def __prepare_figure(self, width=12, height=3):
         fig, ax = plt.subplots(1, 1)
@@ -264,19 +264,31 @@ class SeasonalEvaluator(object):
         return fig, ax
 
     def __table_summary(self):
-        index_best = self.score.index(min(self.score))
-        index_worst = self.score.index(max(self.score))
         data =dict({
-            'Number of training data': int(mean([CV.trainingdata_count()[0] for CV in self.modelEvaluators])),
-            'Minimum':self.modelEvaluators[0].y.min(),
+            'Minimum':mean(self.modelEvaluators[0].y.min()),
             'Norm':self.modelEvaluators[0].y.norm(),
             'Maximum':self.modelEvaluators[0].y.max(),
-            '+/- d': self.modelEvaluators[0].y.stdev_s(),
-            'STDEV/ERROR': mean([mean(CV.computeRelError()) for CV in self.modelEvaluators]),
-            'P%': mean([CV.computeP() for CV in self.modelEvaluators])
+            '+/- d':self.modelEvaluators[0].y.stdev_s()
         })
         df=pandas.DataFrame(data)
         return df.to_html()
+
+    def model_table(self):
+        featureselection = dict()
+        for i, name in enumerate(self.featurenames):
+            featureselection.update({name: [selectedfeature[i] for selectedfeature in self.selectedfeatures]})
+
+        data = dict({
+            'Number of training data': [CV.trainingdata_count()[0] for CV in self.modelEvaluators],
+            'Error/STDEV': [round(CV.computeRelError()[0],2) for CV in self.modelEvaluators],
+            'P%': [round(CV.computeP()[0],2) for CV in self.modelEvaluators]
+        })
+        data.update(featureselection)
+        df = pandas.DataFrame(data)
+        return df.sort_values(by=['Error/STDEV'])
+
+    def __model_htmltable(self):
+        return self.model_table().to_html()
 
     def plot_timeseries(self):
         fig, ax = self.__prepare_figure()
@@ -308,10 +320,11 @@ class SeasonalEvaluator(object):
 
         encoded1=self.__encode_figure(self.plot_timeseries())
 
-        table = self.__table_summary()
+        table1 = self.__table_summary()
+        table2 = self.__model_htmltable()
 
         htmlpage = open(filename, 'w')
-        htmlpage.write(page.safe_substitute(TABLE=table, IMAGE1=encoded1))
+        htmlpage.write(page.safe_substitute(TABLE1=table1, IMAGE1=encoded1, TABLE2=table2))
         htmlpage.close()
         return filename
 
