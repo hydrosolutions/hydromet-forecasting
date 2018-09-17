@@ -494,8 +494,8 @@ class FixedIndexTimeseries(object):
         if self.__mode_order.index(mode) <= self.__mode_order.index(self.mode):
             raise ValueError('The target mode is of same or higher frequency than the source mode. Only downsampling is allowed.')
         else:
-            dailyindex = pandas.date_range(self.timeseries.index.values[0], self.timeseries.index.values[-1], freq='D')
-            dailytimeseries = self.timeseries.reindex(dailyindex).interpolate('zero',limit=self.period+1)
+            dailyindex = pandas.date_range(self.timeseries.index.values[0], self.timeseries.index.values[-1]+datetime.timedelta(self.period+1), freq='D')
+            dailytimeseries = self.timeseries.reindex(dailyindex).interpolate('zero',limit=self.period+1).interpolate('linear',limit=self.period+1)
             dummyInstance = FixedIndexTimeseries(pandas.Series(), mode=mode)
             beginyear = self.timeseries.index.values[0].year
             endyear = self.timeseries.index.values[-1].year
