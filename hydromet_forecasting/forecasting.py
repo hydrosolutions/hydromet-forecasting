@@ -805,7 +805,6 @@ class SeasonalForecaster(object):
         self.evaluator = SeasonalEvaluator(self._featurenames, self._selectedfeatures,
                                            [model.Evaluator for model in self.__selectedmodels])
         self.trainingdates = list(set().union(*[model.trainingdates for model in FC_objs]))
-        self.trained = True
 
         return self.evaluator
 

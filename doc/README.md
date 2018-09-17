@@ -11,13 +11,15 @@ The library is split into three modules: timeseries.py, forecasting.py and evalu
 
 Setting up a forecast & predicting:
 
-1. Loading all relevant data as FixedIndexTimeseries instances from the timeseries.py module
-2. Initialising a RegressionModel instance  from the forecasting.py module with default or custom parameters.
+1. Loading all relevant data as FixedIndexTimeseries instances with the timeseries.py module
+2. Initialising a RegressionModel instance  from the forecasting.py module with default or custom parameters. This instance contains the statistical resp. machnie learning methods used for the regression.
 3. Initialising a Forecaster or Seasonal Forecaster instance from the forecasting.py module. Here, most of the relevant parameters are set. The RegressionModel from the previous step is given as argument for initialisation.
-4. Now, with the newly created Forecaster instance, the method train_and_evaluate is executed. This is the computationally most expensive step. The method will return an Evaluator resp. Seasonal Evaluator instance from the evaluating.py module. The Evaluator instance is as well stored as a Forecaster instance attribute .evaluator
+4. Now, with the newly created Forecaster instance, the method train_and_evaluate is executed. This is the computationally most expensive step. The method will return an Evaluator resp. Seasonal Evaluator instance from the evaluating.py module. The Evaluator instance is as well stored as an attribute in the Forecaster instance -> .evaluator
 5. The Evaluator knows the method write_html(filename). It prints a perfromance assessment as html to the given filepath.
-6. A prediction is computed with the method predict(targetdate, X) of the trained Forecaster instance. X is the feature data.
+6. A prediction is computed with the method predict(targetdate, X) of the trained Forecaster instance. X is the feature data required for the forecast.
+7. TODO Store&Update
 
+Please see [hydromet-forecast guideline for user interaction](hydromet_implementation.md) for detailed information on parameter choices 
 ### timeseries.py
  Unfortunately, the pandas library does not support timeseries with decadal or pentadal frequency. For this reason, a new class was designed, that wraps around pandas to handle such frequencies.
  
@@ -30,7 +32,7 @@ A timeseries can be read by using the child class FixedIndexTimeseriesCSV. When 
 * 'p' for pentadal data
 * 'd' for decadal data
 * 'm' for monthly data 
-* 'dl' for daily data (day 366 is ignored for simplicity)
+* 'dl' for daily data (day 366 is ignored)
 * 'xx-yy' for seasonal data, whereby xx is the first month and yy is the second month as two digit integer: e.g. '04-09' for April to and including September
 
 The CSV file must be formatted in the following way:
@@ -154,6 +156,28 @@ prediction=FC_obj.predict(targetdate=datetime.date(2014,4,1),Qm=Talas_Q,Pm=Talas
 print(prediction)
 ```
 
+##### Updating
+The SeasonalForecaster knows the method update(). It is used when new timeseries data are available and should be added to the model without
+repeating the grid_search. In this case only the n-best models previously found will be retrained with the newly available data.
+The update method takes the arguments: target, Qm, Pm=None, Tm=None, Sm=None. The same kind of datasets as when initiliasing the Forecaster instance must be provided.
+It returns the updated Evaluator instance, that is as well stored as .evaluator attribute in the Forecaster instance.
+
+```python
+Talas_Q=FixedIndexTimeseriesCSV("example_data/monthly/Talas_Kluchevka/Q.csv",mode="m") #Discharge
+Talas_T=FixedIndexTimeseriesCSV("example_data/monthly/Talas_Kluchevka/TEMP_ERA.csv",mode="m") #Temperature
+target = Talas_Q.downsample('04-09')
+
+FC_obj = SeasonalForecaster(model=model, target=target, Qm=Talas_Q, Tm=Talas_T, forecast_month=4)
+PA_obj = FC_obj.train_and_evaluate()
+
+#(...)
+
+Talas_Q_new=FixedIndexTimeseriesCSV("newdata/monthly/Talas_Kluchevka/Q.csv",mode="m") #Discharge
+Talas_T_new=FixedIndexTimeseriesCSV("newdata/monthly/Talas_Kluchevka/TEMP_ERA.csv",mode="m") #Temperature
+target_new = Talas_Q_new.downsample('04-09')
+PA_obj = FC_obj.update(target=target_new, Qm=Talas_Q_new, Tm=Talas_T_new)
+
+```
 
 ### evaluating.py
 
@@ -168,3 +192,6 @@ PA_obj.write_html(filename="assessment_report.html")
 ```
 
 At the moment, the format of the report is defined by a static template.
+
+
+### Updating Data and Storing the Forecaster Instance
