@@ -171,10 +171,10 @@ class FixedIndexTimeseries(object):
                 None
             """
         if self.maxindex == 1:
-            if self.doy(self.begin) <= self.doy(date) <= self.doy(self.end):
+            if self.doy(date) <= self.doy(self.end): #replaces: if self.doy(self.begin) <= self.doy(date) <= self.doy(self.end):
                 return 1
-            elif  self.doy(self.begin) <= self.doy(date) or self.doy(date) <= self.doy(self.end):
-                return 1 if self.yearswitch else 2
+            elif self.yearswitch:
+                return 1
             else:
                 return 2
         elif self.maxindex == 365:

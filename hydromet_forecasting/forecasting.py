@@ -721,7 +721,7 @@ class SeasonalForecaster(object):
             raise self.__ModelError("The model has not been trained yet.")
 
         for item in [Qm, Pm, Tm, Sm]:
-            if item is not None and item.mode is not 'm':
+            if item is not None and item.mode != 'm':
                 raise ValueError("features must be of mode 'm")
 
         STm = Sm.multiply(Tm) if Sm and Tm else None
