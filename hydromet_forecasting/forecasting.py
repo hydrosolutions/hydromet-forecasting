@@ -368,7 +368,7 @@ class Forecaster(object):
             x_set = self._X_scaler[annual_index - 1].transform(X_values.reshape(1, -1))
             prediction = self.__model[annual_index - 1].predict(x_set)
             invtrans_prediction = self._y_scaler[annual_index - 1].inverse_transform(prediction.reshape(-1,1))
-            return float(invtrans_prediction+self._seasonal[self._y.convert_to_annual_index(targetdate)-1])
+            return max(0,float(invtrans_prediction+self._seasonal[self._y.convert_to_annual_index(targetdate)-1]))
 
     def train_and_evaluate(self, k_fold='auto', feedback_function=None):
         """Conducts a crossvalidation on the Forecaster instance and returns an Evaluator instance.
