@@ -209,11 +209,12 @@ class Evaluator(object):
         df=pandas.DataFrame(data)
         return df.to_html()
 
-    def write_html(self, filename):
+    def write_html(self, filename=None, htmlpage=None):
         """ writes an evaluation report to the specified filepath as an html
 
             Args:
                 filename: path to the html file to be created
+                htmlpage: html file
 
             Returns:
                 None
@@ -232,10 +233,26 @@ class Evaluator(object):
 
         table1 = self.__table_summary()
 
-        htmlpage = open(filename, 'w')
-        htmlpage.write(page.safe_substitute(TABLE1=table1,IMAGE1=encoded1,IMAGE2=encoded2,IMAGE3=encoded3,IMAGE4=encoded4))
-        htmlpage.close()
-        return filename
+        if filename:
+            htmlpage = open(filename, 'w')
+            htmlpage.write(page.safe_substitute(
+                TABLE1=table1,
+                IMAGE1=encoded1,
+                IMAGE2=encoded2,
+                IMAGE3=encoded3,
+                IMAGE4=encoded4,
+            ))
+            htmlpage.close()
+            return filename
+        elif htmlpage:
+            htmlpage.write(page.safe_substitute(
+                TABLE=table1,
+                IMAGE1=encoded1,
+                IMAGE2=encoded2,
+                IMAGE3=encoded3,
+                IMAGE4=encoded4,
+            ))
+            return htmlpage
 
     def __encode_figure(self, fig):
 
@@ -302,11 +319,12 @@ class SeasonalEvaluator(object):
         ax.legend(handles[-3:], labels[-3:])
         return fig
 
-    def write_html(self, filename):
+    def write_html(self, filename=None, htmlpage=None):
         """ writes an evaluation report to the specified filepath as an html
 
             Args:
                 filename: path to the html file to be created
+                htmlpage: html file
 
             Returns:
                 None
@@ -323,10 +341,22 @@ class SeasonalEvaluator(object):
         table1 = self.__table_summary()
         table2 = self.__model_htmltable()
 
-        htmlpage = open(filename, 'w')
-        htmlpage.write(page.safe_substitute(TABLE1=table1, IMAGE1=encoded1, TABLE2=table2))
-        htmlpage.close()
-        return filename
+        if filename:
+            htmlpage = open(filename, 'w')
+            htmlpage.write(page.safe_substitute(
+                TABLE1=table1,
+                IMAGE1=encoded1,
+                TABLE2=table2,
+            ))
+            htmlpage.close()
+            return filename
+        elif htmlpage:
+            htmlpage.write(page.safe_substitute(
+                TABLE1=table1,
+                IMAGE1=encoded1,
+                TABLE2=table2,
+            ))
+            return htmlpage
 
     def __encode_figure(self, fig):
 
