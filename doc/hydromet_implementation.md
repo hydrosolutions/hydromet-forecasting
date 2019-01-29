@@ -27,13 +27,13 @@ see section [Regression Model](#regression-model)
 
 #### _lag_
 **label**: Issue Date\
-**description**: this parameters is indirectly defined by the user choice of the issue date of the forecast. The parameter defines, which timespan of data can be used features. 
-E.g. lag=0: The forecast is issued on the first day of the predicted period. lag=-1: The forecats is issud one day before the forecasted period begin and so on. This has the consequence, that the data from the period directly preceeding the forecasted period can not be used as feature, because it is not complete resp. the last day of data is missing. The selection of an issue date does not show on the forecast page, but on the inital organisation setup page.\
+**description**: this parameters is indirectly defined by the user choice of the issue date of the forecast. The parameter defines, which timespan of data can be used for features. 
+E.g. lag=0: The forecast is issued on the first day of the predicted period. lag=-1: The forecast is issued one day before the forecasted period begin and so on. This has the consequence that the data from the period directly preceeding the forecasted period can not be used as feature, because it is not complete resp. the last day of data is missing. The selection of an issue date does not show on the forecast page but only on the inital organisation setup page.\
 **default**: No default, an issue date must be set during the initial organisation setup.
 
 #### _multimodel_
 **label**: multimodel\
-**description**: Seperate regression model is trained individually for each period of the year (TRUE) vs. only one regression model is trained (FALSE). Might improve the forecast if timeseries has strong seasonal characteristics.\
+**description**: Separate regression model is trained individually for each period of the year (TRUE) vs. only one regression model is trained (FALSE). Might improve the forecast if timeseries has strong seasonal characteristics.\
 **type**: boolean\
 **user choice**: ON/OFF\
 **default**: OFF
@@ -75,7 +75,7 @@ see section [Regression Model](#regression-model)\
 
 #### _max_features_
 **label**: Feature limit per model\
-**description**: Limits how many features can be included in one model. This parameters strongly influences how long the training process takes, because a larger value will allow more models to select from.\
+**description**: Limits how many features can be included in one model. This parameters strongly influences how long the training process takes because a larger value will allow more models to select from.\
 **type**: integer\
 **user choice**: 1..4\
 **default**: 2
