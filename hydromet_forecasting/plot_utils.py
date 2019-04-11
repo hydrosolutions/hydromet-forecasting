@@ -1,4 +1,4 @@
-
+# -*- encoding: UTF-8 -*-
 import tempfile
 import base64
 import csv
@@ -17,7 +17,7 @@ class PlotUtils(object):
         mode_grid_mapping = {
             'fiveday': (13, 6),
             'decade': (6, 6),
-            'monthly': (3, 4),
+            'monthly': (4, 3),
         }
         return mode_grid_mapping[mode]
 
@@ -32,6 +32,8 @@ class PlotUtils(object):
                 3: 21,
             }
             return month, day_mapper[day_of]
+        elif frequency == 'monthly':
+            return period, 1
 
     @classmethod
     def get_line_points(cls, x, y):
@@ -53,16 +55,24 @@ class PlotUtils(object):
         for i in range(len(x)):
             num += (x[i] - x_mean) * (y[i] - y_mean)
             den += (x[i] - x_mean) ** 2
-        m = num / den
-        c = y_mean - m * x_mean
 
-        return m, c
+        if den:
+            m = num / den
+            c = y_mean - m * x_mean
+            return m, c
+        else:
+            return 1, 0
 
     @classmethod
-    def plot_ts_comparison(cls, x_data, y_data, frequency, encoded=True):
+    def plot_ts_comparison(cls, x_data, y_data, frequency, language='en', encoded=True):
         rows, columns = cls.get_plots_grid(frequency)
         fig, axes = plt.subplots(rows, columns, figsize=(11, 7))
-        fig.subplots_adjust(left=0.06, bottom=0.08, right=0.94, top=0.92, wspace=0.4, hspace=0.8)
+        if frequency == 'decade':
+            fig.subplots_adjust(
+                left=0.06, bottom=0.08, right=0.94, top=0.92, wspace=0.4, hspace=0.8)
+        elif frequency == 'monthly':
+            fig.subplots_adjust(
+                left=0.06, bottom=0.08, right=0.94, top=0.92, wspace=0.2, hspace=0.4)
 
         fig.text(
             0.5,
@@ -94,10 +104,20 @@ class PlotUtils(object):
                 ax.scatter(x_sub_data, y_sub_data, s=20, facecolors='none', edgecolors='black')
                 # set period label
                 ax.xaxis.set_label_position('top')
-                ax.set_xlabel(r'$\bf{{{x_label}\ {period}}}$'.format(
-                    x_label=_(frequency).capitalize(),
-                    period=period,
-                ))
+
+                if frequency == 'decade':
+                    x_label = '{decade} {period}'.format(
+                        decade=_('decade').capitalize(),
+                        period=period
+                    )
+
+                elif frequency == 'monthly':
+                    x_label = get_month_names(
+                        width='wide',
+                        locale=language
+                    )[period]
+
+                ax.set_xlabel(x_label, fontweight='bold')
 
                 # rotate y tick labels
                 ax.tick_params(axis='y', labelrotation=90)
@@ -114,8 +134,9 @@ class PlotUtils(object):
                 ax.set_xlim([ax.get_xlim()[0] - x_out, ax.get_xlim()[1] + x_out])
                 ax.set_ylim([ax.get_ylim()[0] - y_out, ax.get_ylim()[1] + y_out])
 
-                a, b = cls.get_line_points(x_sub_data, y_sub_data)
-                ax.plot(a, b, color='red')  # predicted
+                if not x_sub_data.empty:
+                    a, b = cls.get_line_points(x_sub_data, y_sub_data)
+                    ax.plot(a, b, color='red')  # predicted
 
         return cls.encode_figure(fig) if encoded else fig
 
@@ -156,7 +177,7 @@ class PlotUtils(object):
         fig, ax = plt.subplots(1, 1)
         fig.set_figwidth(width)
         fig.set_figheight(height)
-        fig.subplots_adjust(left=0.06, bottom=0.15, right=0.94, top=0.92)
+        fig.subplots_adjust(left=0.06, bottom=0.1, right=0.94, top=0.92)
 
         fig.text(
             0.5,
@@ -207,9 +228,10 @@ class PlotUtils(object):
             labels = [str(x + 1) for x in range(max_index)]
             max_labels_shown = 15
             skip = len(labels) // max_labels_shown
-            for i in range(len(labels)):
-                if i % skip:
-                    labels[i] = ''
+            if skip:
+                for i in range(len(labels)):
+                    if i % skip:
+                        labels[i] = ''
 
             ax.set_xticklabels(labels)
 
@@ -219,9 +241,14 @@ class PlotUtils(object):
 
     @classmethod
     def plot_rel_error(cls, rel_error, frequency, encoded=True, title=''):
+        if frequency == 'decade':
+            x_label = _('decade').capitalize()
+        elif frequency == 'monthly':
+            x_label = _('Month')
+
         fig, ax = cls.prepare_figure(
             max_index=len(rel_error),
-            x_label=frequency.capitalize(),
+            x_label=x_label,
             y_label=_("Error/STDEV"),
             title=title,
             height=5,
@@ -232,9 +259,14 @@ class PlotUtils(object):
 
     @classmethod
     def plot_p(cls, p, frequency, encoded=True, title=''):
+        if frequency == 'decade':
+            x_label = _('decade').capitalize()
+        elif frequency == 'monthly':
+            x_label = _('Month')
+
         fig, ax = cls.prepare_figure(
             max_index=len(p),
-            x_label=_(frequency).capitalize(),
+            x_label=x_label,
             y_label=_("P% [vm]"),
             height=6,
             title=title,
@@ -280,11 +312,9 @@ if __name__ == '__main__':
     arg_parser.add_argument('-l', '--language', help='Language', choices=('en', 'ru'), default='en')
     args = arg_parser.parse_args()
 
-    # locales = os.environ.get('LOCALES_PATH', 'locales')
-    # t = gettext.translation('messages', locales, languages=[args.language])
-    # t.install()
-
-    def _(message): return message
+    locales = os.environ.get('LOCALES_PATH', 'locales')
+    t = gettext.translation('messages', locales, languages=[args.language])
+    t.install()
 
     y_adj_path = os.path.join(base_dir, args.frequency, 'y_adj.csv')
     forecast_path = os.path.join(base_dir, args.frequency, 'forecast.csv')
@@ -293,10 +323,12 @@ if __name__ == '__main__':
         y_adj = PlotUtils.load_csv(y_adj_path)
         forecast = PlotUtils.load_csv(forecast_path)
 
-        PlotUtils.plot_ts_comparison(y_adj, forecast, args.frequency, encoded=False)
+        PlotUtils.plot_ts_comparison(
+            y_adj, forecast, args.frequency, language=args.language, encoded=False)
 
     if args.plot_type == 'plot_rel_error':
-        rel_error = [
+        if args.frequency == 'decade':
+            rel_error = [
             0.3755913647451166,
             0.3008586080078136,
             0.3389673495917839,
@@ -334,6 +366,21 @@ if __name__ == '__main__':
             0.24575001587122342,
             0.22191620604395182,
         ]
+        elif args.frequency == 'monthly':
+            rel_error = [
+                0.7920407938500859,
+                0.2523890472639323,
+                0.3519820219032708,
+                0.2630958235606327,
+                0.28072176684393074,
+                0.24358040443782097,
+                0.29218901557711935,
+                0.3691242211084926,
+                0.33154760391565813,
+                0.2669608082897862,
+                0.4411112799342047,
+                0.6145082364622891,
+            ]
         PlotUtils.plot_rel_error(
             rel_error,
             args.frequency,
@@ -342,7 +389,8 @@ if __name__ == '__main__':
         )
 
     if args.plot_type == 'plot_p':
-        p = [
+        if args.frequency == 'decade':
+            p = [
             0.825,
             0.9,
             0.9,
@@ -380,6 +428,21 @@ if __name__ == '__main__':
             0.9625,
             0.9875,
         ]
+        elif args.frequency == 'monthly':
+            p = [
+                0.49382716049382713,
+                0.9629629629629629,
+                0.9135802469135802,
+                0.9390243902439024,
+                0.9390243902439024,
+                0.9634146341463414,
+                0.9390243902439024,
+                0.8902439024390244,
+                0.8902439024390244,
+                0.9512195121951219,
+                0.7682926829268293,
+                0.6585365853658537,
+            ]
         PlotUtils.plot_p(
             p,
             args.frequency,

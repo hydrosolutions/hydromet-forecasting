@@ -195,6 +195,7 @@ class Evaluator(object):
             organization,
             site_code,
             site_name,
+            frequency,
             filename=None,
             htmlpage=None,
             language='en'
@@ -204,13 +205,12 @@ class Evaluator(object):
         t = gettext.translation('messages', locales, languages=[language])
         t.install()
 
-        frequency = 'decade'
-
         page = self.load_template_file()
         scatter_plot = PlotUtils.plot_ts_comparison(
             self.y_adj.timeseries,
             self.forecast.timeseries,
-            frequency
+            frequency,
+            language=language,
         )
 
         scaled_error_title = _('Scaled Error [RMSE/STDEV]')
