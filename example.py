@@ -44,22 +44,19 @@ model=reg_model.configure()  #{'n_estimators':20}
 # modes: "m","d","p","dl" --> monthly, decadal, pentadal, daily
 if args.frequency == 'fiveday':
     mode = 'p'
-    # dir_path = ''
-
 elif args.frequency == 'decade':
     mode = 'd'
-    # dir_path = 'example_data/decadal/Ala_Archa/'
-
 elif args.frequency == 'monthly':
     mode = 'm'
-    # dir_path = 'example_data/monthly/Talas_Kluchevka/'
 
-discharge = FixedIndexTimeseriesCSV(
-    "example_data/decadal/Ala_Archa/Q.csv", mode=mode, label="D")
-precipitation = FixedIndexTimeseriesCSV(
-    "example_data/decadal/Ala_Archa/P.csv", mode=mode, label="P")
-temperature = FixedIndexTimeseriesCSV(
-    "example_data/decadal/Ala_Archa/T.csv", mode=mode, label="T")
+discharge = FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/Q.csv", mode='d', label="D")
+precipitation = FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/P.csv", mode='d', label="P")
+temperature = FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/T.csv", mode='d', label="T")
+
+if args.frequency == 'monthly':
+    discharge = discharge.downsample(mode='m')
+    precipitation = precipitation.downsample(mode='m')
+    temperature = temperature.downsample(mode='m')
 
 # ---------------- INITIALISING THE  FORECASTING OBJECT ----------------
 
