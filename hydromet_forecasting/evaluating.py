@@ -5,7 +5,12 @@ from hydromet_forecasting.timeseries import FixedIndexTimeseries
 from string import Template
 import base64
 import tempfile
-from os import path
+from os import path, environ
+import gettext
+from babel.dates import format_date, get_month_names
+
+from utils import to_str
+from plot_utils import PlotUtils
 
 class Evaluator(object):
     """Evaluator class for a predicted timeseries that is given as an FixedIndexTimeseries instance and has annual seasonality.
@@ -18,6 +23,9 @@ class Evaluator(object):
         forecast: the forecasted timeseries
         y_adj: the observed timeseries, reduced to the index of the forecasted timeseries
     """
+
+    _rel_error = None
+    _p = None
 
     def __init__(self, y, forecast):
         """Initialising the Evaluator Instance
@@ -121,31 +129,12 @@ class Evaluator(object):
             count = len(self.forecast.data_by_index(annualindex))
         return count
 
-    def __prepare_figure(self, width=12, height=3):
-
-        fig, ax = plt.subplots(1, 1)
-        fig.set_figwidth(width)
-        fig.set_figheight(height)
-
-        nr_bars=self.y.maxindex
-        periods_in_month=nr_bars/12.0
-        monthly_labels_pos=[p*nr_bars/12.0+(0.0416667*nr_bars-0.5) for p in range(0,12)]
-        ax.set_xticks(monthly_labels_pos)
-        ax.set_xticklabels(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
-
-        monthly_dividers=[p*nr_bars/12.0+(0.0416667*nr_bars-0.5)-1.5 for p in range(0,13)]
-        ax.set_xticks(monthly_dividers, minor=True)
-
-        ax.grid(True, which="minor", axis="x", color="black", linestyle='--')
-        ax.tick_params(axis="x", which="major", length=0)
-        return fig, ax
-
     def plot_y_stats(self):
         norm = self.y.norm()
         stdev = self.y.stdev_s()
         upper = [norm[i]+stdev[i] for i in range(0,len(stdev))]
         lower = [norm[i]-stdev[i] for i in range(0,len(stdev))]
-        fig, ax = self.__prepare_figure()
+        fig, ax = PlotUtils.prepare_figure(len(stdev))
         [ax.plot(self.y.data_by_year(year).values, label='individual years', color='blue', alpha=.2) for year in
          range(self.y.timeseries.index[0].year, self.y.timeseries.index[-1].year + 1)]
         ax.plot(upper, color='black')
@@ -156,112 +145,133 @@ class Evaluator(object):
         plt.ylabel(self.y.label)
         return fig
 
-    def plot_P(self):
-        P = self.computeP()
-        fig, ax = self.__prepare_figure()
-        ax.bar(range(0, len(P)), P, width=0.7, color="black")
-        plt.ylabel("P%")
-        ax.set_ylim([0, 1])
-        return fig
-
-    def plot_RelError(self):
-        relerror = self.computeRelError()
-        fig, ax = self.__prepare_figure()
-        ax.boxplot(relerror)
-        ax.plot([0, ax.get_xlim()[1]], [0.674, 0.674], color='red', linestyle='dashed')
-        plt.ylabel("Error/STDEV")
-        ax.set_ylim([0, 1])
-        return fig
-
     def plot_trainingdata(self):
         count = self.trainingdata_count()
-        fig, ax = self. __prepare_figure()
+        fig, ax = PlotUtils.prepare_figure(len(count))
         ax.bar(range(0, len(count)), count, width=0.7)
         ax.bar(range(0, len(count)), count, width=0.7)
-        plt.ylabel("Number of training data")
+        plt.ylabel(_("Number of training data"))
 
         return fig
 
-    def plot_ts_comparison(self):
-        fig, ax = plt.subplots(1, 1)
-        fig.set_figwidth(8)
-        fig.set_figheight(8)
-        ax.scatter(self.y_adj.timeseries, self.forecast.timeseries, marker=".", color='black')
-        ax.set_ylabel("predicted")
-        ax.set_xlabel("observed")
-        maxval = max(ax.get_xlim()[1],ax.get_ylim()[1])
-        ax.set_ylim([0,maxval])
-        ax.set_xlim([0,maxval])
-        ax.plot([0, maxval], [0, maxval],color='green', linestyle='dashed')
-        r_corr = round(corrcoef(self.y_adj.timeseries, self.forecast.timeseries)[0, 1], 3)
-        ax.text(0.5 * maxval, 0.9 * maxval, ("R = %s" % (r_corr)))
-        return fig
-
-    def __table_summary(self):
-        data =dict({
-            'Number of training data': self.trainingdata_count(),
-            'Minimum':self.y.min(),
-            'Norm':self.y.norm(),
-            'Maximum':self.y.max(),
-            '+/- d': self.y.stdev_s(),
-            'P%': self.computeP()
+    def summary_table(self):
+        data = dict({
+            _('Number of training data'): self.trainingdata_count(),
+            _('Minimum'): self.y.min(),
+            _('Norm'): self.y.norm(),
+            _('Maximum'): self.y.max(),
+            _('+/- d'): self.y.stdev_s(),
+            _('P%'): self.p,
+            _('ScaledError'): self.rel_error,
         })
-        df=pandas.DataFrame(data)
+        df = pandas.DataFrame(data)
         return df.to_html()
 
-    def write_html(self, filename=None, htmlpage=None):
-        """ writes an evaluation report to the specified filepath as an html
+    def p_plot_table(self):
+        data = dict({
+            _('P%'): self.p,
+        })
+        df = pandas.DataFrame(data)
+        return df.to_html()
 
-            Args:
-                filename: path to the html file to be created
-                htmlpage: html file
+    def rel_error_table(self):
+        data = dict({
+            _('ScaledError'): self.rel_error,
+        })
+        df = pandas.DataFrame(data)
+        return df.to_html()
 
-            Returns:
-                None
+    @staticmethod
+    def load_template_file(filename='template.html'):
+        template_path = path.join(path.dirname(__file__), filename)
+        with open(template_path, 'r') as template_path:
+            page = Template(template_path.read())
 
-            Raises:
-                None
-            """
-        templatefilepath = path.join(path.dirname(__file__),'template')
-        with open(templatefilepath, 'r') as htmltemplate:
-            page=Template(htmltemplate.read())
+        return page
 
-        encoded1 = self.__encode_figure(self.plot_y_stats())
-        encoded2 = self.__encode_figure(self.plot_P())
-        encoded3 = self.__encode_figure(self.plot_ts_comparison())
-        encoded4 = self.__encode_figure(self.plot_RelError())
+    def write_html(
+            self,
+            username,
+            organization,
+            site_code,
+            site_name,
+            filename=None,
+            htmlpage=None,
+            language='en'
+    ):
 
-        table1 = self.__table_summary()
+        locales = environ.get('LOCALES_PATH', 'locales')
+        t = gettext.translation('messages', locales, languages=[language])
+        t.install()
+
+        frequency = 'decade'
+
+        page = self.load_template_file()
+        scatter_plot = PlotUtils.plot_ts_comparison(
+            self.y_adj.timeseries,
+            self.forecast.timeseries,
+            frequency
+        )
+
+        scaled_error_title = _('Scaled Error [RMSE/STDEV]')
+        scaled_error_plot = PlotUtils.plot_rel_error(self.rel_error, frequency, title=scaled_error_title)
+        scaled_error_table = self.rel_error_table()
+
+        p_plot_title = _('P% Plot')
+        p_plot_plot = PlotUtils.plot_p(self.p, frequency, title=p_plot_title)
+        p_plot_table = self.p_plot_table()
+
+        quality_assessment_table = self.summary_table()
+
+        report_data = {
+            'SITE_INFO': _('Station: {code} - {name}').format(code=site_code, name=site_name),
+            'USERNAME': username,
+            'ORGANIZATION': organization,
+            'TITLE': _('Forecast Model Training Report'),
+            'REPORT_DATE': format_date(format='long', locale=language),
+            'PLOTS_HEADER': _('{frequency} Forecast Model Quality Assessment').format(
+                frequency=frequency.capitalize()),
+            'SCATTER_PLOT_LABEL': _('Scatter Plot: Observed versus Predicted values'),
+            'SCALED_ERROR_LABEL': scaled_error_title,
+            'P_PLOT_LABEL': p_plot_title,
+            'QUALITY_ASSESSMENT_LABEL': _('Quality Assessment'),
+            'SCATTER_PLOT_IMAGE': scatter_plot,
+            'SCALED_ERROR_PLOT_IMAGE': scaled_error_plot,
+            'SCALED_ERROR_TABLE': scaled_error_table,
+            'P_PLOT_IMAGE': p_plot_plot,
+            'P_PLOT_TABLE': p_plot_table,
+            'QUALITY_ASSESSMENT_TABLE': quality_assessment_table,
+        }
+
+        self.encode_utf8(report_data)
 
         if filename:
             htmlpage = open(filename, 'w')
-            htmlpage.write(page.safe_substitute(
-                TABLE1=table1,
-                IMAGE1=encoded1,
-                IMAGE2=encoded2,
-                IMAGE3=encoded3,
-                IMAGE4=encoded4,
-            ))
+            htmlpage.write(page.safe_substitute(**report_data))
             htmlpage.close()
             return filename
         elif htmlpage:
-            htmlpage.write(page.safe_substitute(
-                TABLE=table1,
-                IMAGE1=encoded1,
-                IMAGE2=encoded2,
-                IMAGE3=encoded3,
-                IMAGE4=encoded4,
-            ))
+            htmlpage.write(page.safe_substitute(**report_data))
             return htmlpage
 
-    def __encode_figure(self, fig):
+    @classmethod
+    def encode_utf8(cls, template_vars):
+        for key, value in template_vars.iteritems():
+            template_vars[key] = to_str(value)
 
-        with tempfile.TemporaryFile(suffix=".png") as tmpfile:
-            fig.savefig(tmpfile, format="png")
-            tmpfile.seek(0)
-            encoded = base64.b64encode(tmpfile.read())
-            tmpfile.close()
-        return encoded
+    @property
+    def rel_error(self):
+        if self._rel_error is None:
+            self._rel_error = self.computeRelError()
+
+        return self._rel_error
+
+    @property
+    def p(self):
+        if self._p is None:
+            self._p = self.computeP()
+
+        return self._p
 
     class __InsufficientData(Exception):
         pass
@@ -332,7 +342,7 @@ class SeasonalEvaluator(object):
             Raises:
                 None
             """
-        templatefilepath = path.join(path.dirname(__file__),'template')
+        templatefilepath = path.join(path.dirname(__file__),'template.html')
         with open(templatefilepath, 'r') as htmltemplate:
             page=Template(htmltemplate.read())
 

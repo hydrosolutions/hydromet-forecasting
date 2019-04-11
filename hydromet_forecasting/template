@@ -1,3 +1,7 @@
+<h>$TITLE</h>
+<h2>$SITE_INFO<h2/>
+
+
 $TABLE1
 $TABLE2
 <p><img src="data:image/png;base64,$IMAGE1" alt="" /></p>

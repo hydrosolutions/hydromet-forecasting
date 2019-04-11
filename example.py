@@ -1,3 +1,5 @@
+# -*- encoding: UTF-8 -*-
+
 from hydromet_forecasting.forecasting import RegressionModel, Forecaster
 from hydromet_forecasting.timeseries import FixedIndexTimeseriesCSV
 import datetime
@@ -34,7 +36,16 @@ FC_obj = Forecaster(model=model,y=discharge,X=[discharge,temperature,precipitati
 # ---------------- TRAIN & OUTPUT A PERFORMANCE ASSESSMENT OF THE MODEL SETUP ----------------
 def print_progress(i, i_max):  print(str(i) + ' of ' + str(int(i_max)))
 PA_obj = FC_obj.train_and_evaluate(feedback_function=print_progress)
-PA_obj.write_html("assessment_report.html")
+
+
+PA_obj.write_html(
+    username='User Name',
+    organization='Organization',
+    site_name='р.Чон-Кемин-устье',
+    site_code='15149',
+    filename='assessment_report.html',
+    language='ru',
+)
 
 
 # ---------------- FORECAST ----------------
