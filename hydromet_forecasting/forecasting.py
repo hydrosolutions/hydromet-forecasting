@@ -589,7 +589,21 @@ class SeasonalForecaster(object):
         self._features = [Qm, Pm, Tm, Sm, STm, SPm, TPm, STPm]
         self.__feature_filter = [i for i in range(0,len(self._features)) if self._features[i]]
         self._features = [self._features[i] for i in self.__feature_filter]
-        featurenames = ["Y_Discharge", "Y_Precipiation", "Y_Temperature", "Y_Snow", "Y_Snow*Temp", "Y_Snow*Precip", "Y_Temp*Precip", "Y_Snow*Precip*Temp"]
+
+        def _(message): return message
+
+        featurenames = [
+            "Y {}".format(_('disch').capitalize()),
+            "Y {}".format(_('precip').capitalize()),
+            "Y {}".format(_('temp').capitalize()),
+            "Y {}".format(_('snow').capitalize()),
+            "Y {} * {}".format(_('snow').capitalize(), _('temp').capitalize()),
+            "Y {} * {}".format(_('snow').capitalize(), _('precip').capitalize()),
+            "Y {} * {}".format(_('temp').capitalize(), _('precip').capitalize()),
+            "Y {} * {} * {}".format(
+                _('snow').capitalize(), _('precip').capitalize(), _('temp').capitalize()
+            ),
+        ]
         self._featurenames = [featurenames[i] for i in self.__feature_filter]
 
         self.__selectedmodels = None

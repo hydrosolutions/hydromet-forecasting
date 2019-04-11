@@ -1,3 +1,4 @@
+# -*- encoding: UTF-8 -*-
 from numpy import nan, isnan, arange, corrcoef, mean
 from matplotlib import pyplot as plt
 import pandas
@@ -288,14 +289,15 @@ class SeasonalEvaluator(object):
         fig, ax = plt.subplots(1, 1)
         fig.set_figwidth(width)
         fig.set_figheight(height)
+        fig.subplots_adjust(left=0.06, bottom=0.1, right=0.94, top=0.92)
         return fig, ax
 
     def __table_summary(self):
-        data =dict({
-            'Minimum':mean(self.modelEvaluators[0].y.min()),
-            'Norm':self.modelEvaluators[0].y.norm(),
-            'Maximum':self.modelEvaluators[0].y.max(),
-            '+/- d':self.modelEvaluators[0].y.stdev_s()
+        data = dict({
+            _('Minimum'): mean(self.modelEvaluators[0].y.min()),
+            _('Norm'): self.modelEvaluators[0].y.norm(),
+            _('Maximum'): self.modelEvaluators[0].y.max(),
+            _('+/- d'): self.modelEvaluators[0].y.stdev_s()
         })
         df=pandas.DataFrame(data)
         return df.to_html()
@@ -303,33 +305,124 @@ class SeasonalEvaluator(object):
     def model_table(self):
         featureselection = dict()
         for i, name in enumerate(self.featurenames):
+            name = _(name)
             featureselection.update({name: [selectedfeature[i] for selectedfeature in self.selectedfeatures]})
 
         data = dict({
-            'Number of training data': [CV.trainingdata_count()[0] for CV in self.modelEvaluators],
-            'Error/STDEV': [round(CV.computeRelError()[0],2) for CV in self.modelEvaluators],
-            'P%': [round(CV.computeP()[0],2) for CV in self.modelEvaluators]
+            _('Number of training data'): [CV.trainingdata_count()[0] for CV in self.modelEvaluators],
+            _('Error/STDEV'): [round(CV.computeRelError()[0],2) for CV in self.modelEvaluators],
+            _('P%'): [round(CV.computeP()[0],2) for CV in self.modelEvaluators]
         })
         data.update(featureselection)
         df = pandas.DataFrame(data)
-        return df.sort_values(by=['Error/STDEV'])
+        return df.sort_values(by=[_('Error/STDEV')])
 
     def __model_htmltable(self):
-        return self.model_table().to_html()
+        # pandas.set_option('display.max_colwidth', 50)
+        return self.model_table().to_html(justify='justify-all')
 
     def plot_timeseries(self):
         fig, ax = self.__prepare_figure()
-        [ax.plot(CV.forecast.timeseries, color='red', label="individual forecasts", alpha=.2) for CV in self.modelEvaluators]
+        [ax.plot(
+            CV.forecast.timeseries, color='red', label=_("individual forecasts"), alpha=.2
+        ) for CV in self.modelEvaluators]
         df_concat = pandas.concat(([CV.forecast.timeseries for CV in self.modelEvaluators]))
         by_row_index = df_concat.groupby(df_concat.index)
         df_means = by_row_index.mean()
-        ax.plot(df_means, color='black', label='mean forecast')
-        ax.plot(self.modelEvaluators[0].y_adj.timeseries, color='green', label='observed')
+        ax.plot(df_means, color='black', label=_('mean forecast'))
+        ax.plot(self.modelEvaluators[0].y_adj.timeseries, color='green', label=_('observed'))
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles[-3:], labels[-3:])
         return fig
 
-    def write_html(self, filename=None, htmlpage=None):
+    @staticmethod
+    def load_template_file(filename='template_seasonal.html'):
+        template_path = path.join(path.dirname(__file__), filename)
+        with open(template_path, 'r') as template_path:
+            page = Template(template_path.read())
+
+        return page
+
+    @classmethod
+    def encode_utf8(cls, template_vars):
+        for key, value in template_vars.iteritems():
+            template_vars[key] = to_str(value)
+
+    def write_html(
+            self,
+            username,
+            organization,
+            site_code,
+            site_name,
+            filename=None,
+            htmlpage=None,
+            language='en'
+    ):
+
+        locales = environ.get('LOCALES_PATH', 'locales')
+        t = gettext.translation('messages', locales, languages=[language])
+        t.install()
+
+        page = self.load_template_file()
+
+        # scatter_plot = PlotUtils.plot_ts_comparison(
+        #     self.y_adj.timeseries,
+        #     self.forecast.timeseries,
+        #     frequency,
+        #     language=language,
+        # )
+        #
+        # scaled_error_title = _('Scaled Error [RMSE/STDEV]')
+        # scaled_error_plot = PlotUtils.plot_rel_error(self.rel_error, frequency, title=scaled_error_title)
+        # scaled_error_table = self.rel_error_table()
+        #
+        # p_plot_title = _('P% Plot')
+        # p_plot_plot = PlotUtils.plot_p(self.p, frequency, title=p_plot_title)
+        # p_plot_table = self.p_plot_table()
+        #
+        # quality_assessment_table = self.summary_table()
+
+        timeseries_plot = self.__encode_figure(self.plot_timeseries())
+        quality_assessment_table = self.__table_summary()
+        model_table = self.__model_htmltable()
+
+        report_data = {
+            'SITE_INFO': _('Station: {code} - {name}').format(code=site_code, name=site_name),
+            'USERNAME': username,
+            'ORGANIZATION': organization,
+            'TITLE': _('Forecast Model Training Report'),
+            'REPORT_DATE': format_date(format='long', locale=language),
+            'PLOTS_HEADER': _('{frequency} Forecast Model Quality Assessment').format(
+                frequency=_('seasonal').capitalize()),
+            'MODEL_TABLE_LABEL': _('Model table'),
+            'MODEL_TABLE': model_table,
+            'QUALITY_ASSESSMENT_LABEL': _('Quality Assessment'),
+            'QUALITY_ASSESSMENT_TABLE': quality_assessment_table,
+            'TIMESERIES_LABEL': _('Timeseries plot'),
+            'TIMESERIES_PLOT': timeseries_plot,
+
+            # 'SCATTER_PLOT_LABEL': _('Scatter Plot: Observed versus Predicted values'),
+            # 'SCALED_ERROR_LABEL': scaled_error_title,
+            # 'P_PLOT_LABEL': p_plot_title,
+            # 'SCATTER_PLOT_IMAGE': scatter_plot,
+            # 'SCALED_ERROR_PLOT_IMAGE': scaled_error_plot,
+            # 'SCALED_ERROR_TABLE': scaled_error_table,
+            # 'P_PLOT_IMAGE': p_plot_plot,
+            # 'P_PLOT_TABLE': p_plot_table,
+        }
+
+        self.encode_utf8(report_data)
+
+        if filename:
+            htmlpage = open(filename, 'w')
+            htmlpage.write(page.safe_substitute(**report_data))
+            htmlpage.close()
+            return filename
+        elif htmlpage:
+            htmlpage.write(page.safe_substitute(**report_data))
+            return htmlpage
+
+    def write_html_(self, filename=None, htmlpage=None):
         """ writes an evaluation report to the specified filepath as an html
 
             Args:

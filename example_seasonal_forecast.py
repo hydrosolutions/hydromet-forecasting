@@ -1,7 +1,14 @@
-from hydromet_forecasting.forecasting import RegressionModel, SeasonalForecaster
-from hydromet_forecasting.timeseries import FixedIndexTimeseriesCSV
+# -*- encoding: UTF-8 -*-
+
+import argparse
 import datetime
 
+from hydromet_forecasting.forecasting import RegressionModel, SeasonalForecaster
+from hydromet_forecasting.timeseries import FixedIndexTimeseriesCSV
+
+arg_parser = argparse.ArgumentParser()
+arg_parser.add_argument('-l', '--language', help='Language', choices=('en', 'ru'), default='en')
+args = arg_parser.parse_args()
 
 # ---------------- SETUP OF A REGRESSION MODEL ----------------
 
@@ -43,7 +50,14 @@ FC_obj = SeasonalForecaster(model=model, target=Talas_Q.downsample('04-09'), Qm=
 # ---------------- STARTING THE GRIDSEARCH & OUTPUT A PERFORMANCE ASSESSMENT ----------------
 def print_progress(i, i_max):  print(str(i) + ' of ' + str(int(i_max)))
 PA_obj = FC_obj.train_and_evaluate(feedback_function=print_progress)
-PA_obj.write_html("assessment_report.html")
+PA_obj.write_html(
+    username='User Name',
+    organization='Organization',
+    site_name='р.Чон-Кемин-устье',
+    site_code='15149',
+    language=args.language,
+    filename="assessment_report.html",
+)
 
 # ---------------- FORECAST ----------------
 # datetime.date(2014,4,1) refers to the target timewindow from April to September. datetime.date(2014,9,30) would give the same result.
