@@ -43,20 +43,27 @@ model=reg_model.configure()  #{'n_estimators':20}
 # ---------------- LOADING TIMESERIES DATA FROM A FILE ----------------
 # modes: "m","d","p","dl" --> monthly, decadal, pentadal, daily
 if args.frequency == 'fiveday':
-    mode = 'p'
+    discharge = FixedIndexTimeseriesCSV(
+        "example_data/fiveday/Ala_Archa/Q.csv", mode='p', label="D")
+    precipitation = FixedIndexTimeseriesCSV(
+        "example_data/fiveday/Ala_Archa/P.csv", mode='p', label="P")
+    temperature = FixedIndexTimeseriesCSV(
+        "example_data/fiveday/Ala_Archa/T.csv", mode='p', label="T")
 elif args.frequency == 'decade':
-    mode = 'd'
+    discharge = FixedIndexTimeseriesCSV(
+        "example_data/decadal/Ala_Archa/Q.csv", mode='d', label="D")
+    precipitation = FixedIndexTimeseriesCSV(
+        "example_data/decadal/Ala_Archa/P.csv", mode='d', label="P")
+    temperature = FixedIndexTimeseriesCSV(
+        "example_data/decadal/Ala_Archa/T.csv", mode='d', label="T")
 elif args.frequency == 'monthly':
-    mode = 'm'
+    discharge = FixedIndexTimeseriesCSV(
+        "example_data/monthly/Talas_Kluchevka/Q.csv", mode='m', label="D")
+    precipitation = FixedIndexTimeseriesCSV(
+        "example_data/monthly/Talas_Kluchevka/PREC_ERA.csv", mode='m', label="P")
+    temperature = FixedIndexTimeseriesCSV(
+        "example_data/monthly/Talas_Kluchevka/TEMP_ERA.csv", mode='m', label="T")
 
-discharge = FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/Q.csv", mode='d', label="D")
-precipitation = FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/P.csv", mode='d', label="P")
-temperature = FixedIndexTimeseriesCSV("example_data/decadal/Ala_Archa/T.csv", mode='d', label="T")
-
-if args.frequency == 'monthly':
-    discharge = discharge.downsample(mode='m')
-    precipitation = precipitation.downsample(mode='m')
-    temperature = temperature.downsample(mode='m')
 
 # ---------------- INITIALISING THE  FORECASTING OBJECT ----------------
 
