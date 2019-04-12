@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='hydromet_forecasting',
-      version='0.2',
+      version='0.3.0',
       description='Forecasting 5-day, decadal, monthly and seasonal discharge',
       url='https://github.com/julesair/hydromet-forecasting',
       author='Jules Henze',
