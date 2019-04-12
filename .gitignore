@@ -101,3 +101,5 @@ venv/
 .Rhistory
 .idea
 output/*
+
+assessment_report*

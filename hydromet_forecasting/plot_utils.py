@@ -13,15 +13,6 @@ from babel.dates import format_date, get_month_names
 class PlotUtils(object):
 
     @staticmethod
-    def get_plots_grid(mode):
-        mode_grid_mapping = {
-            'fiveday': (12, 6),
-            'decade': (6, 6),
-            'monthly': (4, 3),
-        }
-        return mode_grid_mapping[mode]
-
-    @staticmethod
     def get_month_day(frequency, period):
         if frequency == 'fiveday':
             month = ((period - 1) // 6) + 1
@@ -77,7 +68,6 @@ class PlotUtils(object):
 
     @classmethod
     def plot_ts_comparison(cls, x_data, y_data, frequency, language='en', encoded=True):
-        rows, columns = cls.get_plots_grid(frequency)
 
         if frequency == 'fiveday':
             rows, columns = 12, 6
@@ -98,7 +88,7 @@ class PlotUtils(object):
             hspace = 0.8
             figsize = (11, 7)
         elif frequency == 'monthly':
-            rows, columns = 6, 6
+            rows, columns = 4, 3
             left = 0.06
             bottom = 0.08
             right = 0.94

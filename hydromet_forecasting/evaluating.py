@@ -196,7 +196,6 @@ class Evaluator(object):
             organization,
             site_code,
             site_name,
-            frequency,
             filename=None,
             htmlpage=None,
             language='en'
@@ -205,6 +204,13 @@ class Evaluator(object):
         locales = environ.get('LOCALES_PATH', 'locales')
         t = gettext.translation('messages', locales, languages=[language])
         t.install()
+
+        if self.y.mode == 'p':
+            frequency = 'fiveday'
+        elif self.y.mode == 'd':
+            frequency = 'decade'
+        elif self.y.mode == 'm':
+            frequency = 'monthly'
 
         page = self.load_template_file()
         scatter_plot = PlotUtils.plot_ts_comparison(
@@ -365,23 +371,6 @@ class SeasonalEvaluator(object):
 
         page = self.load_template_file()
 
-        # scatter_plot = PlotUtils.plot_ts_comparison(
-        #     self.y_adj.timeseries,
-        #     self.forecast.timeseries,
-        #     frequency,
-        #     language=language,
-        # )
-        #
-        # scaled_error_title = _('Scaled Error [RMSE/STDEV]')
-        # scaled_error_plot = PlotUtils.plot_rel_error(self.rel_error, frequency, title=scaled_error_title)
-        # scaled_error_table = self.rel_error_table()
-        #
-        # p_plot_title = _('P% Plot')
-        # p_plot_plot = PlotUtils.plot_p(self.p, frequency, title=p_plot_title)
-        # p_plot_table = self.p_plot_table()
-        #
-        # quality_assessment_table = self.summary_table()
-
         timeseries_plot = self.__encode_figure(self.plot_timeseries())
         quality_assessment_table = self.__table_summary()
         model_table = self.__model_htmltable()
@@ -400,15 +389,6 @@ class SeasonalEvaluator(object):
             'QUALITY_ASSESSMENT_TABLE': quality_assessment_table,
             'TIMESERIES_LABEL': _('Timeseries plot'),
             'TIMESERIES_PLOT': timeseries_plot,
-
-            # 'SCATTER_PLOT_LABEL': _('Scatter Plot: Observed versus Predicted values'),
-            # 'SCALED_ERROR_LABEL': scaled_error_title,
-            # 'P_PLOT_LABEL': p_plot_title,
-            # 'SCATTER_PLOT_IMAGE': scatter_plot,
-            # 'SCALED_ERROR_PLOT_IMAGE': scaled_error_plot,
-            # 'SCALED_ERROR_TABLE': scaled_error_table,
-            # 'P_PLOT_IMAGE': p_plot_plot,
-            # 'P_PLOT_TABLE': p_plot_table,
         }
 
         self.encode_utf8(report_data)
@@ -420,45 +400,6 @@ class SeasonalEvaluator(object):
             return filename
         elif htmlpage:
             htmlpage.write(page.safe_substitute(**report_data))
-            return htmlpage
-
-    def write_html_(self, filename=None, htmlpage=None):
-        """ writes an evaluation report to the specified filepath as an html
-
-            Args:
-                filename: path to the html file to be created
-                htmlpage: html file
-
-            Returns:
-                None
-
-            Raises:
-                None
-            """
-        templatefilepath = path.join(path.dirname(__file__),'template.html')
-        with open(templatefilepath, 'r') as htmltemplate:
-            page=Template(htmltemplate.read())
-
-        encoded1=self.__encode_figure(self.plot_timeseries())
-
-        table1 = self.__table_summary()
-        table2 = self.__model_htmltable()
-
-        if filename:
-            htmlpage = open(filename, 'w')
-            htmlpage.write(page.safe_substitute(
-                TABLE1=table1,
-                IMAGE1=encoded1,
-                TABLE2=table2,
-            ))
-            htmlpage.close()
-            return filename
-        elif htmlpage:
-            htmlpage.write(page.safe_substitute(
-                TABLE1=table1,
-                IMAGE1=encoded1,
-                TABLE2=table2,
-            ))
             return htmlpage
 
     def __encode_figure(self, fig):

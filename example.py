@@ -75,7 +75,6 @@ PA_obj = FC_obj.train_and_evaluate(feedback_function=print_progress)
 
 
 PA_obj.write_html(
-    frequency=args.frequency,
     username='User Name',
     organization='Organization',
     site_name='р.Чон-Кемин-устье',
