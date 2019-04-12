@@ -313,7 +313,7 @@ class PlotUtils(object):
         fig, ax = cls.prepare_figure(
             max_index=len(p),
             x_label=x_label,
-            y_label=_("P% [vm]"),
+            y_label=_("P[%]"),
             height=6,
             title=title,
         )
