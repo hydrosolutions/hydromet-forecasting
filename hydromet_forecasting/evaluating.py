@@ -295,7 +295,7 @@ class SeasonalEvaluator(object):
         fig, ax = plt.subplots(1, 1)
         fig.set_figwidth(width)
         fig.set_figheight(height)
-        fig.subplots_adjust(left=0.06, bottom=0.1, right=0.94, top=0.92)
+        fig.subplots_adjust(left=0.06, bottom=0.16, right=0.94, top=0.92)
         return fig, ax
 
     def __table_summary(self):
@@ -330,13 +330,21 @@ class SeasonalEvaluator(object):
     def plot_timeseries(self):
         fig, ax = self.__prepare_figure()
         [ax.plot(
-            CV.forecast.timeseries, color='red', label=_("individual forecasts"), alpha=.2
+            CV.forecast.timeseries,
+            color='red',
+            label=_("individual forecasts").decode('utf-8'),
+            alpha=.2
         ) for CV in self.modelEvaluators]
         df_concat = pandas.concat(([CV.forecast.timeseries for CV in self.modelEvaluators]))
         by_row_index = df_concat.groupby(df_concat.index)
         df_means = by_row_index.mean()
-        ax.plot(df_means, color='black', label=_('mean forecast'))
-        ax.plot(self.modelEvaluators[0].y_adj.timeseries, color='green', label=_('observed'))
+        ax.plot(df_means, color='black', label=_('mean forecast').decode('utf-8'))
+        ax.plot(
+            self.modelEvaluators[0].y_adj.timeseries,
+            color='green',
+            label=_('observed').decode('utf-8')
+        )
+        ax.set_xlabel(_('Year').decode('utf-8'))
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles[-3:], labels[-3:])
         return fig

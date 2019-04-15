@@ -590,8 +590,6 @@ class SeasonalForecaster(object):
         self.__feature_filter = [i for i in range(0,len(self._features)) if self._features[i]]
         self._features = [self._features[i] for i in self.__feature_filter]
 
-        def _(message): return message
-
         featurenames = [
             "Y {}".format(_('disch').capitalize()),
             "Y {}".format(_('precip').capitalize()),

@@ -103,14 +103,14 @@ class PlotUtils(object):
         fig.text(
             0.5,
             0.01,
-            r'${}\ [m^3/s]$'.format(_('Observed')),
+            r'${}\ [m^3/s]$'.format(_('Observed')).decode('utf-8'),
             horizontalalignment='center',
             fontsize=12
         )
         fig.text(
             0.01,
             0.5,
-            r'${}\ [m^3/s]$'.format(_('Predicted')),
+            r'${}\ [m^3/s]$'.format(_('Predicted')).decode('utf-8'),
             verticalalignment='center',
             fontsize=12,
             rotation=90
@@ -149,7 +149,7 @@ class PlotUtils(object):
                         locale=language
                     )[period]
 
-                ax.set_xlabel(x_label, fontweight='bold')
+                ax.set_xlabel(x_label.decode('utf-8'), fontweight='bold')
 
                 # rotate y tick labels
                 ax.tick_params(axis='y', labelrotation=90)
@@ -214,7 +214,7 @@ class PlotUtils(object):
         fig.text(
             0.5,
             0.01,
-            x_label,
+            x_label.decode('utf-8'),
             horizontalalignment='center',
             fontsize=12
         )
@@ -222,7 +222,7 @@ class PlotUtils(object):
         fig.text(
             0.5,
             0.95,
-            title,
+            title.decode('utf-8'),
             horizontalalignment='center',
             fontsize=16,
             style='oblique',
@@ -231,7 +231,7 @@ class PlotUtils(object):
         fig.text(
             0.01,
             0.5,
-            y_label,
+            y_label.decode('utf-8'),
             verticalalignment='center',
             fontsize=12,
             rotation=90
