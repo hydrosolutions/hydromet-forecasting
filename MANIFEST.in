@@ -1,1 +1,2 @@
-include hydromet_forecasting/template
+include hydromet_forecasting/template.html
+include hydromet_forecasting/template_seasonal.html
