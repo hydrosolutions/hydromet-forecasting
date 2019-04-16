@@ -104,7 +104,7 @@ class Evaluator(object):
             try:
                 error = abs(self.forecast.data_by_index(index) - self.y_adj.data_by_index(index))
                 error = error.dropna()
-                relerror.append(mean(error.values/stdev))
+                relerror.append(error.values/stdev)
             except:
                 relerror.append(nan)
         return relerror
