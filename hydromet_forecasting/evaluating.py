@@ -8,6 +8,8 @@ import base64
 import tempfile
 from os import path, environ
 import gettext
+from collections import OrderedDict
+
 from babel.dates import format_date, get_month_names
 
 from utils import to_str
@@ -155,32 +157,38 @@ class Evaluator(object):
 
         return fig
 
-    def summary_table(self):
-        data = dict({
-            _('Number of training data'): self.trainingdata_count(),
-            _('Minimum'): self.y.min(),
-            _('Norm'): self.y.norm(),
-            _('Maximum'): self.y.max(),
-            _('+/- d'): self.y.stdev_s(),
-            _('P%'): self.p,
-            _('ScaledError'): [mean(x) for x in self.rel_error],
-        })
+    def summary_table(self, frequency):
+        header, indices = self.period_header_and_indices(frequency, len(self.rel_error))
+        data = OrderedDict((
+            (header, indices),
+            (_('Number of training data'), self.trainingdata_count()),
+            (_('Minimum'), self.y.min()),
+            (_('Norm'), self.y.norm()),
+            (_('Maximum'), self.y.max()),
+            (_('+/- d'), self.y.stdev_s()),
+            (_('P%'), self.p),
+            (_('ScaledError'), [mean(x) for x in self.rel_error]),
+        ))
         df = pandas.DataFrame(data)
-        return df.to_html()
+        return df.to_html(index=False)
 
-    def p_plot_table(self):
-        data = dict({
-            _('P%'): self.p,
-        })
+    def p_plot_table(self, frequency):
+        header, indices = self.period_header_and_indices(frequency, len(self.p))
+        data = OrderedDict((
+            (header, indices),
+            (_('P%'), self.p),
+        ))
         df = pandas.DataFrame(data)
-        return df.to_html()
+        return df.to_html(index=False)
 
-    def rel_error_table(self):
-        data = dict({
-            _('ScaledError'): [mean(x) for x in self.rel_error],
-        })
+    def rel_error_table(self, frequency):
+        header, indices = self.period_header_and_indices(frequency, len(self.rel_error))
+        data = OrderedDict((
+            (header, indices),
+            (_('ScaledError'), [mean(x) for x in self.rel_error]),
+        ))
         df = pandas.DataFrame(data)
-        return df.to_html()
+        return df.to_html(index=False)
 
     @staticmethod
     def load_template_file(filename='template.html'):
@@ -222,13 +230,13 @@ class Evaluator(object):
 
         scaled_error_title = _('Scaled Error [RMSE/STDEV]')
         scaled_error_plot = PlotUtils.plot_rel_error(self.rel_error, frequency, title=scaled_error_title)
-        scaled_error_table = self.rel_error_table()
+        scaled_error_table = self.rel_error_table(frequency)
 
         p_plot_title = _('P% Plot')
         p_plot_plot = PlotUtils.plot_p(self.p, frequency, title=p_plot_title)
-        p_plot_table = self.p_plot_table()
+        p_plot_table = self.p_plot_table(frequency)
 
-        quality_assessment_table = self.summary_table()
+        quality_assessment_table = self.summary_table(frequency)
 
         report_data = {
             'SITE_INFO': _('Station: {code} - {name}').format(code=site_code, name=site_name),
@@ -260,6 +268,16 @@ class Evaluator(object):
         elif htmlpage:
             htmlpage.write(page.safe_substitute(**report_data))
             return htmlpage
+
+    @staticmethod
+    def period_header_and_indices(frequency, num_of_data):
+        if frequency == 'fiveday':
+            header = _('pentade').capitalize()
+        elif frequency == 'decade':
+            header = _('decade').capitalize()
+        elif frequency == 'monthly':
+            header = _('Month')
+        return header, [x + 1 for x in range(num_of_data)]
 
     @classmethod
     def encode_utf8(cls, template_vars):

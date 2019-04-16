@@ -135,13 +135,13 @@ class PlotUtils(object):
                     x_label = '{pentade} {period}'.format(
                         pentade=_('pentade').capitalize(),
                         period=period
-                    )
+                    ).decode('utf-8')
 
                 elif frequency == 'decade':
                     x_label = '{decade} {period}'.format(
                         decade=_('decade').capitalize(),
                         period=period
-                    )
+                    ).decode('utf-8')
 
                 elif frequency == 'monthly':
                     x_label = get_month_names(
@@ -149,7 +149,7 @@ class PlotUtils(object):
                         locale=language
                     )[period]
 
-                ax.set_xlabel(x_label.decode('utf-8'), fontweight='bold')
+                ax.set_xlabel(x_label, fontweight='bold')
 
                 # rotate y tick labels
                 ax.tick_params(axis='y', labelrotation=90)
@@ -264,7 +264,6 @@ class PlotUtils(object):
                 for i in range(len(labels)):
                     if i % skip:
                         labels[i] = ''
-
             ax.set_xticklabels(labels)
 
         ax.grid(True, which="minor", axis="x", color="black", linestyle='--')
@@ -287,7 +286,12 @@ class PlotUtils(object):
             title=title,
             height=5,
         )
+        # boxplot overwrites xticklabels set by prepare_figure() method so
+        #  save them tp x_labels and set again after boxplot is finished
+        x_labels = [x.get_text() for x in ax.get_xticklabels()]
         ax.boxplot(rel_error)
+        ax.set_xticklabels(x_labels)
+
         ax.plot([0, ax.get_xlim()[1]], [0.674, 0.674], color='red', linestyle='dashed')
         return cls.encode_figure(fig) if encoded else fig
 
