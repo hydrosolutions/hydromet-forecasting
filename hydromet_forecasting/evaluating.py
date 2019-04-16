@@ -163,7 +163,7 @@ class Evaluator(object):
             _('Maximum'): self.y.max(),
             _('+/- d'): self.y.stdev_s(),
             _('P%'): self.p,
-            _('ScaledError'): self.rel_error,
+            _('ScaledError'): [mean(x) for x in self.rel_error],
         })
         df = pandas.DataFrame(data)
         return df.to_html()
@@ -177,7 +177,7 @@ class Evaluator(object):
 
     def rel_error_table(self):
         data = dict({
-            _('ScaledError'): self.rel_error,
+            _('ScaledError'): [mean(x) for x in self.rel_error],
         })
         df = pandas.DataFrame(data)
         return df.to_html()
