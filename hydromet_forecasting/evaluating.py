@@ -324,9 +324,35 @@ class SeasonalEvaluator(object):
             _('+/- d'): self.modelEvaluators[0].y.stdev_s()
         })
         df=pandas.DataFrame(data)
-        return df.to_html()
+        return df.to_html(index=False)
 
     def model_table(self):
+        feature_selection = OrderedDict()
+        for i, name in enumerate(self.featurenames):
+            feature = [selected_feature[i] for selected_feature in self.selectedfeatures]
+            feature_dict = OrderedDict(((name, feature), ))
+            feature_selection.update(feature_dict)
+
+        data = OrderedDict((
+            (
+                _('Number of training data'),
+                [CV.trainingdata_count()[0] for CV in self.modelEvaluators]
+            ),
+            (
+                _('Error/STDEV'),
+                [round(mean(CV.computeRelError()[0]), 2) for CV in self.modelEvaluators]
+            ),
+            (
+                _('P%'),
+                [round(CV.computeP()[0], 2) for CV in self.modelEvaluators]),
+        ))
+        data.update(feature_selection)
+        df = pandas.DataFrame(data)
+        df = df.sort_values(by=[_('Error/STDEV')])
+        df.insert(0, column=_('Rank'), value=[x + 1 for x in range(len(self.modelEvaluators))])
+        return df
+
+    def model_table_(self):
         featureselection = dict()
         for i, name in enumerate(self.featurenames):
             name = _(name)
@@ -343,7 +369,7 @@ class SeasonalEvaluator(object):
 
     def __model_htmltable(self):
         # pandas.set_option('display.max_colwidth', 50)
-        return self.model_table().to_html(justify='justify-all')
+        return self.model_table().to_html(justify='justify-all', index=False)
 
     def plot_timeseries(self):
         fig, ax = self.__prepare_figure()

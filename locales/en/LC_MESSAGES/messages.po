@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2019-04-15 13:50+0200\n"
+"POT-Creation-Date: 2019-04-16 17:37+0200\n"
 "PO-Revision-Date: 2019-04-11 13:16+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -18,108 +18,136 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.6.0\n"
 
-#: hydromet_forecasting/evaluating.py:154
-#: hydromet_forecasting/evaluating.py:160
-#: hydromet_forecasting/evaluating.py:318
+#: hydromet_forecasting/evaluating.py:156
+#: hydromet_forecasting/evaluating.py:164
+#: hydromet_forecasting/evaluating.py:338
+#: hydromet_forecasting/evaluating.py:362
 msgid "Number of training data"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:161
-#: hydromet_forecasting/evaluating.py:303
+#: hydromet_forecasting/evaluating.py:165
+#: hydromet_forecasting/evaluating.py:321
 msgid "Minimum"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:162
-#: hydromet_forecasting/evaluating.py:304
+#: hydromet_forecasting/evaluating.py:166
+#: hydromet_forecasting/evaluating.py:322
 msgid "Norm"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:163
-#: hydromet_forecasting/evaluating.py:305
+#: hydromet_forecasting/evaluating.py:167
+#: hydromet_forecasting/evaluating.py:323
 msgid "Maximum"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:164
-#: hydromet_forecasting/evaluating.py:306
+#: hydromet_forecasting/evaluating.py:168
+#: hydromet_forecasting/evaluating.py:324
 msgid "+/- d"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:165
-#: hydromet_forecasting/evaluating.py:173
-#: hydromet_forecasting/evaluating.py:320
+#: hydromet_forecasting/evaluating.py:169
+#: hydromet_forecasting/evaluating.py:179
+#: hydromet_forecasting/evaluating.py:346
+#: hydromet_forecasting/evaluating.py:364
 msgid "P%"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:166
-#: hydromet_forecasting/evaluating.py:180
+#: hydromet_forecasting/evaluating.py:170
+#: hydromet_forecasting/evaluating.py:188
 msgid "ScaledError"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:223
-#: hydromet_forecasting/plot_utils.py:499
+#: hydromet_forecasting/evaluating.py:231
+#: hydromet_forecasting/plot_utils.py:503
 msgid "Scaled Error [RMSE/STDEV]"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:227
-#: hydromet_forecasting/plot_utils.py:636
+#: hydromet_forecasting/evaluating.py:235
+#: hydromet_forecasting/plot_utils.py:640
 msgid "P% Plot"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:234
-#: hydromet_forecasting/evaluating.py:387
+#: hydromet_forecasting/evaluating.py:242
+#: hydromet_forecasting/evaluating.py:431
 msgid "Station: {code} - {name}"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:237
-#: hydromet_forecasting/evaluating.py:390
+#: hydromet_forecasting/evaluating.py:245
+#: hydromet_forecasting/evaluating.py:434
 msgid "Forecast Model Training Report"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:239
-#: hydromet_forecasting/evaluating.py:392
+#: hydromet_forecasting/evaluating.py:247
+#: hydromet_forecasting/evaluating.py:436
 msgid "{frequency} Forecast Model Quality Assessment"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:241
+#: hydromet_forecasting/evaluating.py:249
 msgid "Scatter Plot: Observed versus Predicted values"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:244
-#: hydromet_forecasting/evaluating.py:396
+#: hydromet_forecasting/evaluating.py:252
+#: hydromet_forecasting/evaluating.py:440
 msgid "Quality Assessment"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:319
-#: hydromet_forecasting/evaluating.py:324
-#: hydromet_forecasting/plot_utils.py:286
+#: hydromet_forecasting/evaluating.py:275
+#: hydromet_forecasting/plot_utils.py:136
+#: hydromet_forecasting/plot_utils.py:276
+#: hydromet_forecasting/plot_utils.py:301
+msgid "pentade"
+msgstr ""
+
+#: hydromet_forecasting/evaluating.py:277
+#: hydromet_forecasting/plot_utils.py:142
+#: hydromet_forecasting/plot_utils.py:278
+#: hydromet_forecasting/plot_utils.py:303
+msgid "decade"
+msgstr ""
+
+#: hydromet_forecasting/evaluating.py:279
+#: hydromet_forecasting/plot_utils.py:280
+#: hydromet_forecasting/plot_utils.py:305
+msgid "Month"
+msgstr ""
+
+#: hydromet_forecasting/evaluating.py:342
+#: hydromet_forecasting/evaluating.py:351
+#: hydromet_forecasting/evaluating.py:363
+#: hydromet_forecasting/evaluating.py:368
+#: hydromet_forecasting/plot_utils.py:285
 msgid "Error/STDEV"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:335
+#: hydromet_forecasting/evaluating.py:352
+msgid "Rank"
+msgstr ""
+
+#: hydromet_forecasting/evaluating.py:379
 msgid "individual forecasts"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:341
+#: hydromet_forecasting/evaluating.py:385
 msgid "mean forecast"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:345
+#: hydromet_forecasting/evaluating.py:389
 msgid "observed"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:347
+#: hydromet_forecasting/evaluating.py:391
 msgid "Year"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:393
+#: hydromet_forecasting/evaluating.py:437
 msgid "seasonal"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:394
+#: hydromet_forecasting/evaluating.py:438
 msgid "Model table"
 msgstr ""
 
-#: hydromet_forecasting/evaluating.py:398
+#: hydromet_forecasting/evaluating.py:442
 msgid "Timeseries plot"
 msgstr ""
 
@@ -156,24 +184,7 @@ msgstr ""
 msgid "Predicted"
 msgstr ""
 
-#: hydromet_forecasting/plot_utils.py:136
-#: hydromet_forecasting/plot_utils.py:277
-#: hydromet_forecasting/plot_utils.py:297
-msgid "pentade"
-msgstr ""
-
-#: hydromet_forecasting/plot_utils.py:142
-#: hydromet_forecasting/plot_utils.py:279
-#: hydromet_forecasting/plot_utils.py:299
-msgid "decade"
-msgstr ""
-
-#: hydromet_forecasting/plot_utils.py:281
-#: hydromet_forecasting/plot_utils.py:301
-msgid "Month"
-msgstr ""
-
-#: hydromet_forecasting/plot_utils.py:306
+#: hydromet_forecasting/plot_utils.py:310
 msgid "P[%]"
 msgstr ""
 
