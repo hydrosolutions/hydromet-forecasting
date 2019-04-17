@@ -12,10 +12,6 @@ arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('-l', '--language', help='Language', choices=('en', 'ru'), default='en')
 args = arg_parser.parse_args()
 
-locales = os.environ.get('LOCALES_PATH', 'locales')
-t = gettext.translation('messages', locales, languages=[args.language])
-t.install()
-
 # ---------------- SETUP OF A REGRESSION MODEL ----------------
 
 # Get a dict of available regression methods

@@ -330,6 +330,9 @@ class SeasonalEvaluator(object):
     def model_table(self):
         feature_selection = OrderedDict()
         for i, name in enumerate(self.featurenames):
+            # translate substrings
+            for x in ('disch', 'precip', 'temp', 'snow'):
+                name = name.replace(x.capitalize(), _(x).capitalize())
             feature = [selected_feature[i] for selected_feature in self.selectedfeatures]
             feature_dict = OrderedDict(((name, feature), ))
             feature_selection.update(feature_dict)
@@ -352,21 +355,6 @@ class SeasonalEvaluator(object):
         df = df.sort_values(by=[_('Error/STDEV')])
         df.insert(0, column=_('Rank'), value=[x + 1 for x in range(len(self.modelEvaluators))])
         return df
-
-    def model_table_(self):
-        featureselection = dict()
-        for i, name in enumerate(self.featurenames):
-            name = _(name)
-            featureselection.update({name: [selectedfeature[i] for selectedfeature in self.selectedfeatures]})
-
-        data = dict({
-            _('Number of training data'): [CV.trainingdata_count()[0] for CV in self.modelEvaluators],
-            _('Error/STDEV'): [round(CV.computeRelError()[0],2) for CV in self.modelEvaluators],
-            _('P%'): [round(CV.computeP()[0],2) for CV in self.modelEvaluators]
-        })
-        data.update(featureselection)
-        df = pandas.DataFrame(data)
-        return df.sort_values(by=[_('Error/STDEV')])
 
     def __model_htmltable(self):
         # pandas.set_option('display.max_colwidth', 50)
