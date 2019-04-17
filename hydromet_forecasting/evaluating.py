@@ -6,14 +6,14 @@ from hydromet_forecasting.timeseries import FixedIndexTimeseries
 from string import Template
 import base64
 import tempfile
-from os import path, environ
-import gettext
+from os import path
 from collections import OrderedDict
 
 from babel.dates import format_date, get_month_names
 
-from utils import to_str
+from utils import to_str, activate
 from plot_utils import PlotUtils
+
 
 class Evaluator(object):
     """Evaluator class for a predicted timeseries that is given as an FixedIndexTimeseries instance and has annual seasonality.
@@ -209,9 +209,7 @@ class Evaluator(object):
             language='en'
     ):
 
-        locales = environ.get('LOCALES_PATH', 'locales')
-        t = gettext.translation('messages', locales, languages=[language])
-        t.install()
+        activate(language)
 
         if self.y.mode == 'p':
             frequency = 'fiveday'
@@ -420,9 +418,7 @@ class SeasonalEvaluator(object):
             language='en'
     ):
 
-        locales = environ.get('LOCALES_PATH', 'locales')
-        t = gettext.translation('messages', locales, languages=[language])
-        t.install()
+        activate(language)
 
         page = self.load_template_file()
 
