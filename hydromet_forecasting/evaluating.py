@@ -239,7 +239,10 @@ class Evaluator(object):
         quality_assessment_table = self.summary_table(frequency)
 
         report_data = {
-            'SITE_INFO': _('Station: {code} - {name}').format(code=site_code, name=site_name),
+            'SITE_INFO': _('Station: {code} - {name}').format(
+                code=to_str(site_code),
+                name=to_str(site_name)
+            ),
             'USERNAME': username,
             'ORGANIZATION': organization,
             'TITLE': _('Forecast Model Training Report'),
@@ -428,7 +431,10 @@ class SeasonalEvaluator(object):
         model_table = self.__model_htmltable()
 
         report_data = {
-            'SITE_INFO': _('Station: {code} - {name}').format(code=site_code, name=site_name),
+            'SITE_INFO': _('Station: {code} - {name}').format(
+                code=to_str(site_code),
+                name=to_str(site_name)
+            ),
             'USERNAME': username,
             'ORGANIZATION': organization,
             'TITLE': _('Forecast Model Training Report'),

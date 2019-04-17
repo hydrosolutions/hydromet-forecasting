@@ -77,7 +77,7 @@ PA_obj = FC_obj.train_and_evaluate(feedback_function=print_progress)
 PA_obj.write_html(
     username='User Name',
     organization='Organization',
-    site_name='р.Чон-Кемин-устье',
+    site_name=u'р.Чон-Кемин-устье',
     site_code='15149',
     filename='assessment_report_{}.html'.format(args.frequency),
     language=args.language,
