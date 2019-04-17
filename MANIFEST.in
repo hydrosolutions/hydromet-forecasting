@@ -1,3 +1,4 @@
 include hydromet_forecasting/template.html
 include hydromet_forecasting/template_seasonal.html
-recursive-include locales *
+include *.po
+include *.mo
