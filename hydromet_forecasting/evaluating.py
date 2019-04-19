@@ -198,31 +198,32 @@ class Evaluator(object):
         spacer_4 = defaultdict(lambda: '0px')
         spacer_5 = defaultdict(lambda: '0px')
 
-        spacer_2['monthly_ru'] = '160px'
+        spacer_1['monthly_ru'] = '600px'
+        spacer_2['monthly_ru'] = '800px'
         spacer_3['monthly_ru'] = '30px'
-        spacer_4['monthly_ru'] = '600px'
+        spacer_4['monthly_ru'] = '500px'
         spacer_5['monthly_ru'] = '30px'
 
-        spacer_2['monthly_en'] = '160px'
+        spacer_2['monthly_en'] = '100px'
         spacer_3['monthly_en'] = '30px'
-        spacer_4['monthly_en'] = '600px'
+        spacer_4['monthly_en'] = '500px'
         spacer_5['monthly_en'] = '30px'
 
         spacer_1['decade_en'] = '100px'
-        spacer_2['decade_en'] = '760px'
-        spacer_4['decade_en'] = '80px'
+        spacer_2['decade_en'] = '100px'
+        spacer_4['decade_en'] = '300px'
 
         spacer_1['decade_ru'] = '100px'
-        spacer_2['decade_ru'] = '720px'
-        spacer_4['decade_ru'] = '60px'
+        spacer_2['decade_ru'] = '100px'
+        spacer_4['decade_ru'] = '300px'
 
-        spacer_1['fiveday_en'] = '700px'
+        spacer_1['fiveday_en'] = '200px'
         spacer_2['fiveday_en'] = '300px'
-        spacer_4['fiveday_en'] = '600px'
+        spacer_4['fiveday_en'] = '100px'
 
-        spacer_1['fiveday_ru'] = '700px'
+        spacer_1['fiveday_ru'] = '100px'
         spacer_2['fiveday_ru'] = '300px'
-        spacer_4['fiveday_ru'] = '600px'
+        spacer_4['fiveday_ru'] = '100px'
 
         return {
             'SPACER_1': spacer_1['_'.join((frequency, language))],
@@ -231,7 +232,6 @@ class Evaluator(object):
             'SPACER_4': spacer_4['_'.join((frequency, language))],
             'SPACER_5': spacer_5['_'.join((frequency, language))],
         }
-
 
     @staticmethod
     def load_template_file(filename='template.html'):
