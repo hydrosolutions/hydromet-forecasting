@@ -1,5 +1,6 @@
 # -*- encoding: UTF-8 -*-
 from numpy import nan, isnan, arange, corrcoef, mean
+import numpy as np
 from matplotlib import pyplot as plt
 import pandas
 from hydromet_forecasting.timeseries import FixedIndexTimeseries
@@ -7,7 +8,7 @@ from string import Template
 import base64
 import tempfile
 from os import path
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 
 from babel.dates import format_date, get_month_names
 
@@ -163,14 +164,14 @@ class Evaluator(object):
             (header, indices),
             (_('Number of training data'), self.trainingdata_count()),
             (_('Minimum'), self.y.min()),
-            (_('Norm'), self.y.norm()),
-            (_('Maximum'), self.y.max()),
-            (_('+/- d'), self.y.stdev_s()),
-            (_('P%'), self.p),
-            (_('ScaledError'), [mean(x) for x in self.rel_error]),
+            (_('Norm'), np.round(self.y.norm(), 2)),
+            (_('Maximum'), np.round(self.y.max(), 2)),
+            (_('+/- d'), np.round(self.y.stdev_s(), 2)),
+            (_('P%'), np.round(self.p, 3)),
+            (_('ScaledError'), [np.round(mean(x), 3) for x in self.rel_error]),
         ))
         df = pandas.DataFrame(data)
-        return df.to_html(index=False)
+        return df.to_html(justify='justify-all', index=False)
 
     def p_plot_table(self, frequency):
         header, indices = self.period_header_and_indices(frequency, len(self.p))
@@ -189,6 +190,48 @@ class Evaluator(object):
         ))
         df = pandas.DataFrame(data)
         return df.to_html(index=False)
+
+    def get_spacers(self, frequency, language):
+        spacer_1 = defaultdict(lambda: '0px')
+        spacer_2 = defaultdict(lambda: '0px')
+        spacer_3 = defaultdict(lambda: '0px')
+        spacer_4 = defaultdict(lambda: '0px')
+        spacer_5 = defaultdict(lambda: '0px')
+
+        spacer_2['monthly_ru'] = '160px'
+        spacer_3['monthly_ru'] = '30px'
+        spacer_4['monthly_ru'] = '600px'
+        spacer_5['monthly_ru'] = '30px'
+
+        spacer_2['monthly_en'] = '160px'
+        spacer_3['monthly_en'] = '30px'
+        spacer_4['monthly_en'] = '600px'
+        spacer_5['monthly_en'] = '30px'
+
+        spacer_1['decade_en'] = '200px'
+        spacer_2['decade_en'] = '760px'
+        spacer_4['decade_en'] = '80px'
+
+        spacer_1['decade_ru'] = '200px'
+        spacer_2['decade_ru'] = '720px'
+        spacer_4['decade_ru'] = '60px'
+
+        spacer_1['fiveday_en'] = '700px'
+        spacer_2['fiveday_en'] = '300px'
+        spacer_4['fiveday_en'] = '600px'
+
+        spacer_1['fiveday_ru'] = '700px'
+        spacer_2['fiveday_ru'] = '300px'
+        spacer_4['fiveday_ru'] = '600px'
+
+        return {
+            'SPACER_1': spacer_1['_'.join((frequency, language))],
+            'SPACER_2': spacer_2['_'.join((frequency, language))],
+            'SPACER_3': spacer_3['_'.join((frequency, language))],
+            'SPACER_4': spacer_4['_'.join((frequency, language))],
+            'SPACER_5': spacer_5['_'.join((frequency, language))],
+        }
+
 
     @staticmethod
     def load_template_file(filename='template.html'):
@@ -258,6 +301,8 @@ class Evaluator(object):
             'P_PLOT_TABLE': p_plot_table,
             'QUALITY_ASSESSMENT_TABLE': quality_assessment_table,
         }
+
+        report_data.update(self.get_spacers(frequency, language))
 
         self.encode_utf8(report_data)
 
