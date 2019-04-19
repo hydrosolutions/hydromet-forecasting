@@ -208,11 +208,11 @@ class Evaluator(object):
         spacer_4['monthly_en'] = '600px'
         spacer_5['monthly_en'] = '30px'
 
-        spacer_1['decade_en'] = '200px'
+        spacer_1['decade_en'] = '100px'
         spacer_2['decade_en'] = '760px'
         spacer_4['decade_en'] = '80px'
 
-        spacer_1['decade_ru'] = '200px'
+        spacer_1['decade_ru'] = '100px'
         spacer_2['decade_ru'] = '720px'
         spacer_4['decade_ru'] = '60px'
 
