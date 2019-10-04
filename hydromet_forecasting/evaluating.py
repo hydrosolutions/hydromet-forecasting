@@ -417,7 +417,7 @@ class SeasonalEvaluator(object):
         df_means = by_row_index.mean()
         ax.plot(df_means, color='black', label=_('mean forecast').decode('utf-8'))
         ax.plot(
-            self.modelEvaluators[0].y_adj.timeseries,
+            self.modelEvaluators[0].y.timeseries,
             color='green',
             label=_('observed').decode('utf-8')
         )
