@@ -164,11 +164,11 @@ class Evaluator(object):
             (header, indices),
             (_('Number of training data'), self.trainingdata_count()),
             (_('Minimum'), self.y.min()),
-            (_('Norm'), np.round(self.y.norm(), 2)),
+            (_('Average'), np.round(self.y.norm(), 2)),
             (_('Maximum'), np.round(self.y.max(), 2)),
             (_('+/- d'), np.round(self.y.stdev_s(), 2)),
-            (_('P%'), np.round(self.p, 3)),
-            (_('ScaledError'), [np.round(mean(x), 3) for x in self.rel_error]),
+            (_('P%'), np.round(self.p, 2) * 100),
+            (_('ScaledError'), [np.round(mean(x), 2) for x in self.rel_error]),
         ))
         df = pandas.DataFrame(data)
         return df.to_html(justify='justify-all', index=False)
@@ -246,6 +246,10 @@ class Evaluator(object):
             organization,
             site_code,
             site_name,
+            forecast_model_name,
+            forecast_method,
+            forecast_model_params,
+            forecast_method_params,
             filename=None,
             htmlpage=None,
             language='en'
@@ -299,6 +303,11 @@ class Evaluator(object):
             'P_PLOT_IMAGE': p_plot_plot,
             'P_PLOT_TABLE': p_plot_table,
             'QUALITY_ASSESSMENT_TABLE': quality_assessment_table,
+            'FORECAST_MODEL_INFO': _('Forecast model info:'),
+            'FORECAST_MODEL_NAME': _('Name: ') + forecast_model_name,
+            'FORECAST_METHOD': _('Method: ') + forecast_method,
+            'FORECAST_MODEL_PARAMS': _('Model parameters: ') + str(forecast_model_params),
+            'FORECAST_METHOD_PARAMS': _('Method parameters: ') + str(forecast_method_params),
         }
 
         report_data.update(self.get_spacers(frequency, language))
@@ -364,7 +373,7 @@ class SeasonalEvaluator(object):
     def __table_summary(self):
         data = dict({
             _('Minimum'): mean(self.modelEvaluators[0].y.min()),
-            _('Norm'): self.modelEvaluators[0].y.norm(),
+            _('Average'): self.modelEvaluators[0].y.norm(),
             _('Maximum'): self.modelEvaluators[0].y.max(),
             _('+/- d'): self.modelEvaluators[0].y.stdev_s()
         })
@@ -445,6 +454,10 @@ class SeasonalEvaluator(object):
             organization,
             site_code,
             site_name,
+            forecast_model_name,
+            forecast_method,
+            forecast_model_params,
+            forecast_method_params,
             filename=None,
             htmlpage=None,
             language='en'
@@ -475,6 +488,11 @@ class SeasonalEvaluator(object):
             'QUALITY_ASSESSMENT_TABLE': quality_assessment_table,
             'TIMESERIES_LABEL': _('Timeseries plot'),
             'TIMESERIES_PLOT': timeseries_plot,
+            'FORECAST_MODEL_INFO': _('Forecast model info:'),
+            'FORECAST_MODEL_NAME': _('Name: ') + forecast_model_name,
+            'FORECAST_METHOD': _('Method: ') + forecast_method,
+            'FORECAST_MODEL_PARAMS': _('Model parameters: ') + str(forecast_model_params),
+            'FORECAST_METHOD_PARAMS': _('Method parameters: ') + str(forecast_method_params),
         }
 
         self.encode_utf8(report_data)
